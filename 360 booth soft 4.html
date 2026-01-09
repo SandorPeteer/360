@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360 selfie - KANDO BOOTH</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        /* --- DESIGN --- */
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0f0f0f;
+            color: #eee;
+            font-family: 'Segoe UI', sans-serif;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .panel {
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+        }
+
+        .left-panel {
+            width: 28%;
+            background: #181818;
+            border-right: 1px solid #333;
+            z-index: 2;
+            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .center-panel {
+            width: 44%;
+            background: #000;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding-bottom: 20px;
+        }
+
+        .right-panel {
+            width: 28%;
+            background: #181818;
+            border-left: 1px solid #333;
+        }
+
+        .app-header {
+            font-size: 24px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            text-align: center;
+            background: linear-gradient(90deg, #fff, #03dac6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h3 {
+            margin: 0 0 5px 0;
+            color: #03dac6;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+
+        label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            margin-top: 8px;
+            display: block;
+            font-weight: bold;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #252525;
+            border: 1px solid #333;
+            color: #fff;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        /* MÓDVÁLTÓ */
+        .mode-switch {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            background: #222;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            border: none;
+            background: transparent;
+            color: #666;
+            cursor: pointer;
+            padding: 8px;
+            font-weight: bold;
+        }
+
+        .mode-btn.active {
+            background: #03dac6;
+            color: #000;
+            border-radius: 4px;
+        }
+
+        /* DROP ZONE */
+        #dropZone {
+            border: 2px dashed #444;
+            background: #1a1a1a;
+            color: #aaa;
+            height: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-top: 10px;
+        }
+
+        #dropZone:hover {
+            border-color: #03dac6;
+            background: #222;
+            color: #fff;
+        }
+
+        #dropZone.dragover {
+            border-color: #03dac6;
+            background: #2a2a2a;
+        }
+
+        /* VIDEÓ */
+        #videoContainer {
+            position: relative;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 9;
+            /* alap: fekvő konténer */
+            max-height: 70vh;
+            background: #000;
+            border: 2px solid #333;
+            overflow: hidden;
+            border-radius: 8px;
+            will-change: transform;
+            margin: 0 auto;
+        }
+
+        #videoContainer video,
+        #videoContainer canvas,
+        #videoContainer img {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        /* Overlay PNG alpha must show through to the canvas/video under it (do not paint black behind transparent pixels) */
+        #overlayImg {
+            background: transparent !important;
+        }
+
+        #videoContainer canvas,
+        #videoContainer img {
+            object-fit: cover;
+        }
+
+        #videoContainer video {
+            object-fit: cover;
+        }
+
+        #statusBadge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            font-size: 11px;
+            color: #03dac6;
+            z-index: 5;
+            border: 1px solid #333;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        #progressBarContainer {
+            width: 100%;
+            height: 4px;
+            background: #222;
+            margin-top: 15px;
+            border-radius: 2px;
+            display: none;
+            overflow: hidden;
+        }
+
+        #progressBar {
+            width: 0%;
+            height: 100%;
+            background: #03dac6;
+            transition: width 0.2s;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #03dac6, #00695c);
+            color: #fff;
+            height: 60px;
+            font-size: 18px;
+            border: none;
+            margin-top: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+
+        .btn-projector {
+            background: #6200ee;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        .scroll-area {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            background: #121212;
+            padding: 5px;
+        }
+
+        .effect-item {
+            font-size: 12px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* EFFEKTEK – stabil (Safari-kompatibilis) layout: nincs display:contents */
+        .eff-compact {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .eff-toprow {
+            display: grid;
+            grid-template-columns: 59px minmax(160px, 1fr) 20px 8px 33px minmax(160px, 1fr) 25px;
+            column-gap: 12px;
+            row-gap: 10px;
+            align-items: center;
+            width: 100%;
+        }
+
+        .eff-label {
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin: 0;
+            white-space: nowrap;
+            letter-spacing: 0.8px;
+            line-height: 1;
+        }
+
+        .eff-value {
+            font-size: 12px;
+            color: #03dac6;
+            font-weight: 800;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            justify-self: end;
+            line-height: 1;
+            padding-left: 6px;
+        }
+
+        .eff-slider {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            height: 18px;
+            min-width: 160px;
+        }
+
+        .eff-divider {
+            width: 1px;
+            height: 18px;
+            background: #2a2a2a;
+            justify-self: center;
+            border-radius: 1px;
+        }
+
+        .eff-bottomrow {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .eff-preset {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .eff-preset button {
+            width: auto;
+            padding: 6px 8px;
+            background: #252525;
+            border: 1px solid #333;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 800;
+            color: #eee;
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        .eff-preset button.active {
+            background: #03dac6;
+            color: #000;
+            border: none;
+        }
+
+        .eff-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .eff-actions button {
+            width: auto;
+            padding: 8px 10px;
+            font-size: 12px;
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        /* Szűkebb nézet: a két sor marad, csak a felső grid törik */
+        @media (max-width: 1100px) {
+            .eff-toprow {
+                grid-template-columns: 72px minmax(160px, 1fr) 80px;
+            }
+
+            .eff-divider {
+                display: none;
+            }
+
+            .eff-toprow .eff-speed-label,
+            .eff-toprow .eff-speed-slider,
+            .eff-toprow .eff-speed-value {
+                grid-column: 1 / -1;
+            }
+        }
+
+        #btnApplySelected {
+            display: none !important;
+        }
+
+        /* Effektek idővonal (timeline) – gyors átlátás */
+        #effectsTimeline {
+            height: 34px;
+            display: flex;
+            width: 100%;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #121212;
+            margin-top: 10px;
+        }
+
+        .eff-seg {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            user-select: none;
+            border-right: 1px solid #222;
+            color: #ddd;
+            padding: 0 6px;
+            min-width: 18px;
+        }
+
+        .eff-seg:last-child {
+            border-right: none;
+        }
+
+        .eff-seg.slow {
+            background: rgba(3, 218, 198, 0.18);
+        }
+
+        .eff-seg.norm {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .eff-seg.fast {
+            background: rgba(98, 0, 238, 0.22);
+        }
+
+        .eff-seg.selected {
+            outline: 2px solid #03dac6;
+            outline-offset: -2px;
+        }
+
+        /* Kijelölhető lista sor */
+        .effect-item.selectable {
+            cursor: pointer;
+        }
+
+        .effect-item.selectable.selected {
+            background: rgba(3, 218, 198, 0.10);
+        }
+
+        .eff-del {
+            width: auto;
+            padding: 6px 8px;
+            background: transparent;
+            border: 1px solid #333;
+            color: #aaa;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        #effectsSummary {
+            font-size: 11px;
+            color: #888;
+            margin-top: 6px;
+            line-height: 1.25;
+        }
+
+        /* LAST OUTPUT (kész videó) – ne nyomja össze a preview-t, ne legyen óriási portraitban */
+        #lastOutput {
+            width: 100%;
+            max-width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            align-self: center;
+            /* NE stretch: ne húzza szét a dobozt */
+        }
+
+        /* A beépített videó-előnézet sok böngészőben (különösen portraitnál) szétveri a layoutot.
+           A videó így is automatikusan letöltődik, és a „Megnyitás új lapon / Letöltés” gombok megmaradnak. */
+        #lastOutputVideo {
+            display: none;
+        }
+
+        #lastOutput video {
+            max-height: 34vh;
+        }
+
+        /* Portrait módban a player nagyon magas lenne (9:16) – korlátozzuk */
+        body[data-aspect="portrait"] #lastOutput video {
+            max-height: 28vh;
+        }
+
+        /* Ha szűk a viewport, még agresszívebb limit */
+        @media (max-height: 800px) {
+            #lastOutput video {
+                max-height: 28vh;
+            }
+
+            body[data-aspect="portrait"] #lastOutput video {
+                max-height: 24vh;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- BAL PANEL -->
+        <div class="panel left-panel">
+            <h3>1. Branding & Kijelző</h3>
+            <label>Esemény Neve</label>
+            <input type="text" id="brandTitleInput" placeholder="Pl: Molnár Esküvő" oninput="updateBranding()">
+            <label>Logó (PNG)</label>
+            <input type="file" id="logoInput" accept="image/png" onchange="updateLogo()">
+            <button class="btn-projector" onclick="openProjectorWindow()">🖥️ Kivetítő Nyitása</button>
+
+            <hr style="border-color:#333; width:100%; margin:10px 0;">
+
+            <h3>2. Média elemek</h3>
+            <label>Overlay Keret</label>
+            <input type="file" id="overlayFile" accept="image/png" onchange="loadOverlay(this)">
+            <label>Zene (.mp3)</label>
+            <input type="file" id="musicFile" accept="audio/*">
+        </div>
+
+        <!-- KÖZÉP PANEL -->
+        <div class="panel center-panel">
+            <div class="app-header">360 selfie - KANDO BOOTH</div>
+
+            <div id="videoContainer">
+                <!-- Élőkép (csak webkamera módban) -->
+                <video id="liveVideo" autoplay muted playsinline></video>
+                <!-- Lejátszás (Fájl módban és rendereléskor) -->
+                <video id="rawPlayback" style="display:none;" muted playsinline></video>
+                <canvas id="renderCanvas" width="1280" height="720" style="display:none;"></canvas>
+                <img id="overlayImg" style="display:none;">
+                <div id="statusBadge">KÉSZENLÉT</div>
+
+            </div>
+
+            <div id="lastOutput" style="display:none; margin-top:12px; align-self:center;">
+                <div
+                    style="background:rgba(0,0,0,0.75); border:1px solid #333; border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+                    <video id="lastOutputVideo" controls playsinline muted
+                        style="width:100%; height:auto; aspect-ratio:16/9; object-fit:cover; border-radius:8px; border:1px solid #333;"></video>
+                    <div style="flex:1; min-width:0;">
+                        <div
+                            style="font-size:12px; color:#03dac6; font-weight:800; letter-spacing:1px; text-transform:uppercase;">
+                            Utolsó videó</div>
+                        <div id="lastOutputInfo" style="font-size:11px; color:#aaa; margin-top:4px;">Megtekinthető
+                            itt is, ha a rendszer nem nyitja meg.</div>
+                        <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                            <button id="btnOpenLast"
+                                style="width:auto; padding:8px 10px; background:#252525; border:1px solid #333; border-radius:6px; cursor:pointer;">Megnyitás
+                                új lapon</button>
+                            <button id="btnDownloadLast"
+                                style="width:auto; padding:8px 10px; background:#03dac6; color:#000; border:none; border-radius:6px; cursor:pointer; font-weight:800;">Letöltés</button>
+                            <button id="btnHideLast"
+                                style="width:auto; padding:8px 10px; background:transparent; border:1px solid #333; color:#aaa; border-radius:6px; cursor:pointer;">Elrejt</button>
+                        </div>
+                        <div style="font-size:10px; color:#666; margin-top:6px;">MP4-hez szerveres konvert (FFmpeg)
+                            ajánlott; böngészőben nem garantált a közvetlen MP4 rögzítés.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="progressBarContainer">
+                <div id="progressBar"></div>
+            </div>
+            <p id="processText" style="color:#aaa; font-size:11px; margin-top:5px; text-align:center; height:15px;"></p>
+        </div>
+
+        <!-- JOBB PANEL -->
+        <div class="panel right-panel">
+            <h3>3. Működési Mód</h3>
+            <div class="mode-switch">
+                <button class="mode-btn active" id="btnModeCam" onclick="setMode('cam')">Kamera indítás</button>
+                <button class="mode-btn" id="btnModeFile" onclick="setMode('file')">Fájl Import</button>
+            </div>
+
+            <div id="camControls">
+                <label>Kamera Forrás</label>
+                <select id="camSelect" onchange="startCamera()">
+                    <option>Betöltés...</option>
+                </select>
+                <label>Felvétel hossza (mp)</label>
+                <input type="number" id="recDuration" value="4" min="2" max="10">
+
+                <label>Kimenet képarány</label>
+                <select id="outputAspect" onchange="applyOutputAspectFromUI()">
+                    <option value="landscape" selected>Fekvő 16:9</option>
+                    <option value="portrait">Álló 9:16</option>
+                </select>
+
+                <label>Overlay illesztés</label>
+                <select id="overlayFit" onchange="applyOverlayFitFromUI()">
+                    <option value="stretch" selected>Szélekhez húz (stretch)</option>
+                    <option value="cover">Kitölt (crop) (cover)</option>
+                    <option value="contain">Teljes kép (contain)</option>
+                </select>
+
+                <label>Forrás forgatás</label>
+                <select id="sourceRotate" onchange="applySourceRotateFromUI()">
+                    <option value="0" selected>0° (nincs)</option>
+                    <option value="90">90° (álló – balra)</option>
+                    <option value="270">270° (álló – jobbra)</option>
+                </select>
+
+                <button id="startBtn" class="btn-start" onclick="initiateCamSequence()">FELVÉTEL START</button>
+            </div>
+
+            <div id="fileControls" style="display:none;">
+                <p style="font-size:12px; color:#aaa;">Húzd ide a GoPro videót, vagy kattints a dobozra a tallózáshoz.
+                </p>
+
+                <div id="dropZone" onclick="document.getElementById('videoInput').click()">
+                    <span style="font-size:24px;">📂</span>
+                    <br>Kattints vagy Húzd ide<br>a videót
+                </div>
+                <input type="file" id="videoInput" accept="video/*" style="display:none;"
+                    onchange="handleFileSelect(this)">
+
+                <button id="processFileBtn" class="btn-start" style="background:#3700b3;" disabled>FELDOLGOZÁS
+                    START</button>
+            </div>
+
+            <hr style="border-color:#333; width:100%; margin:15px 0;">
+
+            <h3>4. Effektek</h3>
+
+            <div class="eff-compact">
+                <div class="eff-toprow">
+                    <div class="eff-label">Szakasz</div>
+                    <input class="eff-slider" type="range" id="effTimeSlider" min="0.5" max="10" step="0.5" value="2">
+                    <div class="eff-value" id="effTimeVal">2.0 s</div>
+
+                    <div class="eff-divider" aria-hidden="true"></div>
+
+                    <div class="eff-label">Seb.</div>
+                    <input class="eff-slider" type="range" id="effSpeedSlider" min="0.25" max="3" step="0.05"
+                        value="0.5">
+                    <div class="eff-value" id="effSpeedVal">0.5×</div>
+                </div>
+
+                <div class="eff-bottomrow">
+                    <div class="eff-preset" aria-label="Sebesség preset">
+                        <button type="button" id="btnSpeed05" onclick="setSpeedPreset(0.5)">0.5×</button>
+                        <button type="button" id="btnSpeed10" onclick="setSpeedPreset(1.0)">1×</button>
+                        <button type="button" id="btnSpeed20" onclick="setSpeedPreset(2.0)">2×</button>
+                    </div>
+
+                    <div class="eff-actions">
+                        <button type="button" onclick="addEffect()" style="background:#333;">+ Szakasz</button>
+                        <button type="button" onclick="clearEffects()"
+                            style="background:transparent; border:1px solid #333; color:#aaa;">Törlés</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="effectsTimeline"
+                title="Kattints egy szegmensre: kijelölés. A 'Frissít' gomb a kijelölt szakaszt átírja a csúszkák alapján.">
+            </div>
+            <div class="scroll-area" id="effectsList" style="margin-top:8px; max-height:180px;"></div>
+            <div id="effectsSummary"></div>
+
+            <label style="margin-top:10px; display:flex; align-items:center;">
+                <input type="checkbox" id="boomerangMode" style="width:auto; margin-right:8px;"> Boomerang
+            </label>
+        </div>
+    </div>
+
+    <script>
+        // --- VÁLTOZÓK ---
+        let currentMode = 'cam'; // 'cam' vagy 'file'
+        let projectorWin = null;
+        let stream = null;
+        let mediaRecorder = null;
+        let chunks = [];
+        let effects = [];
+        let selectedEffectIndex = -1;
+        let isProcessing = false;
+        let rawVideoBlob = null;
+        let currentLogoData = null;
+
+        // Overlay betöltés állapot (stabil rajzolás + debug)
+        let overlayReady = false;
+
+        // Kimenet képarány / overlay illesztés
+        let outputAspectMode = 'landscape'; // 'landscape' | 'portrait'
+        let overlayFitMode = 'stretch'; // 'stretch' | 'cover' | 'contain'
+
+        // Forrás forgatás (NDI/telefon álló módhoz)
+        let sourceRotateDeg = 0; // 0 | 90 | 270
+
+        // Ha a forrás fixen fekvő (16:9) és a kimenet portrait (9:16), akkor mentéskor
+        // automatikusan elforgatjuk a forrást 270°-kal, KIVÉVE ha a felhasználó explicit
+        // beállított 90/270 forgatást.
+        function getEffectiveRotateDeg(videoEl) {
+            // explicit user beállítás elsőbbséget élvez
+            const forced = sourceRotateDeg || 0;
+            if (forced === 90 || forced === 270) return forced;
+
+            // Auto-rotate csak akkor, ha PORTRAIT kimenetet kérsz ÉS a forrás ténylegesen fekvő (w>h)
+            if (outputAspectMode === 'portrait') {
+                const v = videoEl || liveVideo || rawPlayback;
+                const vw = (v && v.videoWidth) ? v.videoWidth : 0;
+                const vh = (v && v.videoHeight) ? v.videoHeight : 0;
+                if (vw > 0 && vh > 0 && vw > vh) return 270;
+            }
+            return 0;
+        }
+
+        function applyPreviewAspect() {
+            const vc = document.getElementById('videoContainer');
+            if (!vc) return;
+
+            // PREVIEW keret: alapból 16:9 fekvő.
+            // Portrait módban nem 9:16-re rajzoljuk át (ebből lesz a „négyzetes” összeomlás),
+            // hanem a 16:9 keretet forgatjuk 270°-kal és méretezzük, hogy stabilan beférjen.
+
+            const portrait = (outputAspectMode === 'portrait');
+
+            vc.style.transformOrigin = '50% 50%';
+
+            if (portrait) {
+                // Portrait preview keret: ténylegesen 9:16, NEM forgatjuk a konténert.
+                // Így a doboz nem fog "kilógni" a center panelből.
+                vc.style.transform = 'none';
+                vc.style.aspectRatio = '9 / 16';
+
+                // Stabil illesztés: max 70vh magas, és a szélesség ehhez igazodik.
+                // (Ha a panel szűk, a maxWidth=100% fogja meg.)
+                vc.style.height = '70vh';
+                vc.style.maxHeight = '70vh';
+                vc.style.width = 'calc(70vh * 9 / 16)';
+                vc.style.maxWidth = '100%';
+            } else {
+                vc.style.aspectRatio = '16 / 9';
+                vc.style.width = '100%';
+                vc.style.height = 'auto';
+                vc.style.maxHeight = '70vh';
+                vc.style.transform = 'none';
+                vc.style.maxWidth = '100%';
+            }
+            syncLastOutputWidth();
+        }
+
+        function applySourceRotateFromUI() {
+            const sel = document.getElementById('sourceRotate');
+            const v = sel ? parseInt(sel.value, 10) : 0;
+            sourceRotateDeg = (v === 90 || v === 270) ? v : 0;
+
+            // Preview keret + video transzform frissítése
+            applyPreviewAspect();
+            if (currentMode === 'cam') {
+                syncPreviewCanvasToMode(liveVideo);
+            }
+            requestAnimationFrame(() => applyLiveVideoTransform());
+            setTimeout(applyLiveVideoTransform, 0);
+        }
+
+        function applyLiveVideoTransform() {
+            const vc = document.getElementById('videoContainer');
+            if (!vc || !liveVideo) return;
+
+            const eff = getEffectiveRotateDeg(liveVideo);
+            const deg = ((eff % 360) + 360) % 360;
+
+            // A liveVideo elemet NEM CSS-sel próbáljuk jól méretezni/forgatni, mert abból jön a zoom/kicsinyítés.
+            // A korrekt előnézetet a canvas-ra rajzoljuk (drawLivePreviewLoop).
+            liveVideo.style.transform = 'none';
+            liveVideo.style.objectFit = 'cover';
+            liveVideo.style.transformOrigin = '50% 50%';
+
+            // A státusz badge maradjon a konténerben, nem forgatjuk.
+            // A forgatás a canvas rajzolásnál történik.
+
+            // Biztonság: ha valaki mégis bekapcsolja a liveVideo megjelenítést, legalább forogjon.
+            if (liveVideo.style.display !== 'none' && deg !== 0) {
+                liveVideo.style.transform = `rotate(${deg}deg)`;
+            }
+        }
+
+        function applyOutputAspectFromUI() {
+            const sel = document.getElementById('outputAspect');
+            outputAspectMode = sel ? sel.value : 'landscape';
+            document.body.setAttribute('data-aspect', outputAspectMode);
+
+            // Preview keret képarány
+            applyPreviewAspect();
+
+            // Last output preview (a doboz ne torlódjon össze portraitnál)
+            applyLastOutputAspectFromMode();
+
+            // Ha kamerán vagyunk, igazítsuk a preview canvas méretét is (portrait/landscape váltásnál)
+            if (currentMode === 'cam') {
+                syncPreviewCanvasToMode(liveVideo);
+            }
+
+            // A videó transzform újraszámolása
+            requestAnimationFrame(() => applyLiveVideoTransform());
+            setTimeout(applyLiveVideoTransform, 0);
+            setTimeout(applyLiveVideoTransform, 50);
+        }
+
+        function applyOverlayFitFromUI() {
+            const sel = document.getElementById('overlayFit');
+            overlayFitMode = sel ? sel.value : 'stretch';
+
+            // Élő előnézet IMG illesztése
+            if (overlayFitMode === 'stretch') overlayImg.style.objectFit = 'fill';
+            else if (overlayFitMode === 'contain') overlayImg.style.objectFit = 'contain';
+            else overlayImg.style.objectFit = 'cover';
+        }
+
+        function setVideoContainerAspectFromCanvas() {
+            const vc = document.getElementById('videoContainer');
+            if (!vc) return;
+
+            // A renderCanvas mérete diktálja a kimeneti képarányt (ez lesz a mentett videó is)
+            if (canvas && canvas.width && canvas.height) {
+                vc.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
+            } else {
+                // fallback
+                applyPreviewAspect();
+            }
+        }
+
+        function chooseCanvasSizeByMode(sourceW, sourceH) {
+            // A portrait/landscape itt már TÉNYLEG a kimenet méretét állítja.
+            // auto: NDI-nél alapból 16:9 a stabil alap.
+            const mode = outputAspectMode;
+
+            if (mode === 'portrait') {
+                // Álló kimenet (720x1280)
+                return { w: 720, h: 1280 };
+            }
+
+            // Fekvő kimenet (1280x720)
+            return { w: 1280, h: 720 };
+        }
+
+        function drawVideoCoverToRect(ctx2, videoEl, dx, dy, dw, dh) {
+            const vw = videoEl.videoWidth || dw;
+            const vh = videoEl.videoHeight || dh;
+
+            const srcAspect = vw / vh;
+            const dstAspect = dw / dh;
+
+            let sx = 0, sy = 0, sw = vw, sh = vh;
+
+            if (srcAspect > dstAspect) {
+                sh = vh;
+                sw = Math.round(vh * dstAspect);
+                sx = Math.round((vw - sw) / 2);
+                sy = 0;
+            } else {
+                sw = vw;
+                sh = Math.round(vw / dstAspect);
+                sx = 0;
+                sy = Math.round((vh - sh) / 2);
+            }
+
+            ctx2.drawImage(videoEl, sx, sy, sw, sh, dx, dy, dw, dh);
+        }
+
+        function drawVideoCover(ctx2, videoEl, dstW, dstH) {
+            drawVideoCoverToRect(ctx2, videoEl, 0, 0, dstW, dstH);
+        }
+
+        function drawVideoCoverRotated(ctx2, videoEl, dstW, dstH, rotateDeg) {
+            const deg = (rotateDeg % 360 + 360) % 360;
+            if (deg === 0) {
+                drawVideoCoverToRect(ctx2, videoEl, 0, 0, dstW, dstH);
+                return;
+            }
+
+            const rad = (deg * Math.PI) / 180;
+
+            ctx2.save();
+            ctx2.translate(dstW / 2, dstH / 2);
+            ctx2.rotate(rad);
+
+            const swap = (deg === 90 || deg === 270);
+            const rw = swap ? dstH : dstW;
+            const rh = swap ? dstW : dstH;
+
+            drawVideoCoverToRect(ctx2, videoEl, -rw / 2, -rh / 2, rw, rh);
+            ctx2.restore();
+        }
+
+        // Rögzítő kimenet formátum (próbálunk kompatibiliset választani)
+        let lastOutputUrl = null;
+        let lastOutputExt = 'webm';
+        let lastOutputMime = 'video/webm';
+
+        // Elemek
+        const liveVideo = document.getElementById('liveVideo');
+        const rawPlayback = document.getElementById('rawPlayback');
+        const canvas = document.getElementById('renderCanvas');
+        const ctx = canvas.getContext('2d');
+        const overlayImg = document.getElementById('overlayImg');
+        const statusBadge = document.getElementById('statusBadge');
+        const progressBar = document.getElementById('progressBar');
+        const progressBarContainer = document.getElementById('progressBarContainer');
+        const processText = document.getElementById('processText');
+
+        // --- LIVE PREVIEW CANVAS LOOP (kamera előnézet a canvas-on) ---
+        let livePreviewRAF = 0;
+
+        function stopLivePreviewLoop() {
+            if (livePreviewRAF) {
+                cancelAnimationFrame(livePreviewRAF);
+                livePreviewRAF = 0;
+            }
+        }
+
+        function syncPreviewCanvasToMode(videoEl) {
+            const v = videoEl || liveVideo;
+            const vw = (v && v.videoWidth) ? v.videoWidth : 1280;
+            const vh = (v && v.videoHeight) ? v.videoHeight : 720;
+            const chosen = chooseCanvasSizeByMode(vw, vh);
+            if (canvas.width !== chosen.w || canvas.height !== chosen.h) {
+                canvas.width = chosen.w;
+                canvas.height = chosen.h;
+            }
+            setVideoContainerAspectFromCanvas();
+        }
+
+        function drawLivePreviewOnce() {
+            if (currentMode !== 'cam') return;
+            if (isProcessing) return;
+            if (!liveVideo || !liveVideo.srcObject) return;
+            if (liveVideo.readyState < 2) return; // nincs kép még
+
+            // A preview mindig a canvas-on megy, így nem lesz se "óriási zoom", se "bélyegkép".
+            try {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawVideoCoverRotated(ctx, liveVideo, canvas.width, canvas.height, getEffectiveRotateDeg(liveVideo));
+            } catch (e) {
+                // ne öljük meg a loopot
+                console.warn('[PREVIEW] draw failed:', e);
+            }
+        }
+
+        function drawLivePreviewLoop() {
+            stopLivePreviewLoop();
+            const loop = () => {
+                drawLivePreviewOnce();
+                livePreviewRAF = requestAnimationFrame(loop);
+            };
+            livePreviewRAF = requestAnimationFrame(loop);
+        }
+
+        // Utolsó kimenet UI
+
+        const lastOutputBox = document.getElementById('lastOutput');
+        const lastOutputVideo = document.getElementById('lastOutputVideo');
+        const lastOutputInfo = document.getElementById('lastOutputInfo');
+        const btnOpenLast = document.getElementById('btnOpenLast');
+        const btnDownloadLast = document.getElementById('btnDownloadLast');
+        const btnHideLast = document.getElementById('btnHideLast');
+
+        function applyLastOutputAspectFromMode() {
+            if (!lastOutputVideo) return;
+
+            // Landscape: 16:9, Portrait: 9:16
+            const ar = (outputAspectMode === 'portrait') ? '9/16' : '16/9';
+            try {
+                lastOutputVideo.style.aspectRatio = ar;
+            } catch (_) {
+                // Safari fallback: ignore
+            }
+
+            // Portraitban túl magas lenne a player → limitet CSS ad, itt csak biztosítjuk a data-attr-t
+            try {
+                document.body.setAttribute('data-aspect', outputAspectMode);
+            } catch (_) { }
+        }
+
+        function syncLastOutputWidth() {
+            const vc = document.getElementById('videoContainer');
+            const lo = document.getElementById('lastOutput');
+            if (!vc || !lo) return;
+
+            // A kész videó + gombok doboza ugyanakkora szélességű legyen, mint a preview keret.
+            // Így portrait módban nem lesz „űber nagy” full panel szélességű.
+            const r = vc.getBoundingClientRect();
+            const w = Math.max(0, Math.floor(r.width));
+            if (w > 0) {
+                lo.style.width = w + 'px';
+                lo.style.maxWidth = w + 'px';
+            } else {
+                lo.style.width = '100%';
+                lo.style.maxWidth = '100%';
+            }
+        }
+
+        // MediaRecorder támogatott mimeType kiválasztása (Mac-en a VP9 gyakran problémás lejátszásnál)
+        function pickRecorderMime() {
+            const candidates = [
+                // MP4 rögzítés NEM garantált (főleg Chrome-ban), de ha van, örülünk
+                { mime: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', ext: 'mp4' },
+                { mime: 'video/mp4;codecs=avc1.42E01E', ext: 'mp4' },
+                // WebM opciók: VP8 általában kompatibilisebb, mint VP9
+                { mime: 'video/webm;codecs=vp8', ext: 'webm' },
+                { mime: 'video/webm;codecs=vp9', ext: 'webm' },
+                { mime: 'video/webm', ext: 'webm' }
+            ];
+
+            if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) {
+                return { mime: 'video/webm', ext: 'webm' };
+            }
+
+            for (const c of candidates) {
+                try {
+                    if (MediaRecorder.isTypeSupported(c.mime)) return c;
+                } catch (_) { }
+            }
+            return { mime: 'video/webm', ext: 'webm' };
+        }
+
+        function setLastOutput(url, mime, ext, bytes) {
+            // Régi URL felszabadítás
+            try { if (lastOutputUrl) URL.revokeObjectURL(lastOutputUrl); } catch (_) { }
+
+            lastOutputUrl = url;
+            lastOutputMime = mime;
+            lastOutputExt = ext;
+
+            lastOutputVideo.src = url;
+            lastOutputBox.style.display = 'block';
+            // Ensure the preview player matches the selected output aspect
+            applyLastOutputAspectFromMode();
+            syncLastOutputWidth();
+
+            const sizeMB = bytes ? (bytes / (1024 * 1024)).toFixed(1) : '?';
+            lastOutputInfo.innerText = `Formátum: ${ext.toUpperCase()} (${mime}) • Méret: ${sizeMB} MB`;
+        }
+
+        btnOpenLast.onclick = () => {
+            if (!lastOutputUrl) return;
+            window.open(lastOutputUrl, '_blank');
+        };
+        btnDownloadLast.onclick = () => {
+            if (!lastOutputUrl) return;
+            const a = document.createElement('a');
+            const now = new Date();
+            a.href = lastOutputUrl;
+            a.download = `360_Video_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.${lastOutputExt}`;
+            a.click();
+        };
+        btnHideLast.onclick = () => {
+            lastOutputBox.style.display = 'none';
+        };
+
+        // Safari/MediaRecorder diagnosztika: ha nincs MediaRecorder, a feldolgozás nem fog menni.
+        (function bootChecks() {
+            // A "Utolsó videó" doboz csak a feldolgozás végén jelenik meg.
+            try {
+                if (lastOutputInfo) {
+                    lastOutputInfo.innerText = 'A feldolgozás végén itt jelenik meg az utolsó videó (előnézet + letöltés).';
+                }
+            } catch (_) { }
+
+            if (!window.MediaRecorder) {
+                console.error('[REC] MediaRecorder NOT available in this browser.');
+                statusBadge.innerText = 'SAFARI: NINCS FELVÉTEL';
+                statusBadge.style.color = 'red';
+                processText.innerText = 'Ez a Safari verzió nem támogatja a MediaRecorder-t. Használj Chrome-ot, vagy engedélyezd a Safari kísérleti MediaRecorder/WebRTC opcióit.';
+            }
+        })();
+
+        // --- 0. MÓDVÁLTÁS ---
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btnModeCam').className = mode === 'cam' ? 'mode-btn active' : 'mode-btn';
+            document.getElementById('btnModeFile').className = mode === 'file' ? 'mode-btn active' : 'mode-btn';
+
+            document.getElementById('camControls').style.display = mode === 'cam' ? 'block' : 'none';
+            document.getElementById('fileControls').style.display = mode === 'file' ? 'block' : 'none';
+
+            if (mode === 'cam') {
+                // Kamera módban a korrekt előnézetet canvas-on mutatjuk (nem a video elemen),
+                // így a portrait/rotate nem fog szétesni.
+                liveVideo.style.display = 'none';
+                canvas.style.display = 'block';
+                rawPlayback.style.display = 'none';
+                // DropZone elrejtése kamera módban
+                const dz = document.getElementById('dropZone');
+                if (dz) dz.style.display = 'none';
+                loadCameras();
+            } else {
+                stopLivePreviewLoop();
+                liveVideo.style.display = 'none';
+                rawPlayback.style.display = 'none'; // Csak feldolgozáskor látszik
+                if (stream) stream.getTracks().forEach(t => t.stop());
+
+                // Drop Zone Események
+                const dz = document.getElementById('dropZone');
+                // Biztosan látszódjon a drop zone fájl módban
+                if (dz) dz.style.display = 'flex';
+                dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('dragover'); };
+                dz.ondragleave = () => dz.classList.remove('dragover');
+                dz.ondrop = (e) => {
+                    e.preventDefault(); dz.classList.remove('dragover');
+                    if (e.dataTransfer.files[0]) processImportedFile(e.dataTransfer.files[0]);
+                };
+            }
+        }
+
+        function handleFileSelect(input) {
+            if (input.files[0]) processImportedFile(input.files[0]);
+        }
+
+        async function processImportedFile(file) {
+            statusBadge.innerText = "FÁJL BETÖLTVE";
+            statusBadge.style.color = "#fff";
+
+            // Blob létrehozása a fájlból
+            rawVideoBlob = file;
+            rawPlayback.src = URL.createObjectURL(rawVideoBlob);
+
+            // Azonnali indítás
+            startProcessingLoop();
+        }
+
+
+        // --- 1. BRANDING & KIVETÍTŐ ---
+        function updateBranding() {
+            const text = document.getElementById('brandTitleInput').value || "360 Booth";
+            if (projectorWin && !projectorWin.closed) {
+                projectorWin.postMessage({ type: 'updateBrand', title: text, logo: currentLogoData }, '*');
+            }
+        }
+        function updateLogo() {
+            const file = document.getElementById('logoInput').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) { currentLogoData = e.target.result; updateBranding(); }
+                reader.readAsDataURL(file);
+            }
+        }
+        function openProjectorWindow() {
+            if (projectorWin && !projectorWin.closed) { projectorWin.focus(); return; }
+            // (A korábbi kivetítő HTML kódja változatlan, itt egyszerűsítve hívom meg)
+            const displayHTML = `<!DOCTYPE html><html lang="hu"><head><meta charset="UTF-8"><title>360 Booth - Kivetítő</title><style>body{margin:0;background:#000;color:#fff;font-family:sans-serif;display:grid;grid-template-columns:75% 25%;height:100vh;overflow:hidden}#main{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,#1a1a1a 0%,#000 100%)}#side{background:#111;border-left:1px solid #333;padding:20px;display:flex;flex-direction:column;align-items:center}video{max-width:90%;border:1px solid #333;border-radius:10px}.g-item{width:100%;margin-bottom:10px;border:1px solid #333;border-radius:5px;cursor:pointer}.g-item video{width:100%;display:block}</style></head><body><div id="main"><h1 id="title" style="text-transform:uppercase;letter-spacing:4px">360 Booth</h1><img id="logo" style="max-height:80px;margin-bottom:20px;display:none"><video id="disp" controls autoplay loop style="display:none"></video><h2 id="wait">Várakozás...</h2></div><div id="side"><h3>Galéria</h3><div id="gal" style="width:100%;overflow-y:auto"></div></div><script>window.addEventListener('message',e=>{const d=e.data;if(d.type==='updateBrand'){document.getElementById('title').innerText=d.title;if(d.logo){document.getElementById('logo').src=d.logo;document.getElementById('logo').style.display='block'}else{document.getElementById('logo').style.display='none'}}if(d.type==='newVideo'){document.getElementById('wait').style.display='none';const v=document.getElementById('disp');v.style.display='block';v.src=d.url;v.play();const g=document.createElement('div');g.className='g-item';g.innerHTML='<video src="'+d.url+'" muted></video>';g.onclick=()=>{v.src=d.url;v.play()};document.getElementById('gal').prepend(g)}})<\/script></body></html>`;
+            projectorWin = window.open("", "ProjectorWindow", "width=1280,height=720,menubar=no,toolbar=no");
+            projectorWin.document.write(displayHTML);
+            setTimeout(() => updateBranding(), 500);
+        }
+        function sendToProjector(blobUrl) {
+            if (projectorWin && !projectorWin.closed) { projectorWin.postMessage({ type: 'newVideo', url: blobUrl }, '*'); }
+        }
+
+        // --- 2. KAMERA (Ha mégis kell) ---
+        async function loadCameras() {
+            // Kamera lista megbízható betöltése: előbb engedélyt kérünk,
+            // majd enumerateDevices, végül indítás.
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    console.error('[CAM] mediaDevices/getUserMedia not available. Use HTTPS or localhost.');
+                    statusBadge.innerText = 'KAMERA NEM ELÉRHETŐ';
+                    statusBadge.style.color = 'red';
+                    return;
+                }
+
+                // Engedélykérés (labels + videoinput lista csak ez után megbízható)
+                let tmpStream = null;
+                try {
+                    tmpStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                } catch (e) {
+                    console.error('[CAM] Permission/getUserMedia failed:', e);
+                    statusBadge.innerText = 'KAMERA ENGEDÉLY KELL';
+                    statusBadge.style.color = 'red';
+                    return;
+                } finally {
+                    if (tmpStream) tmpStream.getTracks().forEach(t => t.stop());
+                }
+
+                const d = await navigator.mediaDevices.enumerateDevices();
+                const s = document.getElementById('camSelect');
+                s.innerHTML = '';
+
+                const cams = d.filter(x => x.kind === 'videoinput');
+                if (cams.length === 0) {
+                    console.error('[CAM] No videoinput devices found.');
+                    s.innerHTML = '<option value="">Nincs kamera</option>';
+                    statusBadge.innerText = 'NINCS KAMERA';
+                    statusBadge.style.color = 'red';
+                    return;
+                }
+
+                cams.forEach((x, idx) => {
+                    const o = document.createElement('option');
+                    o.value = x.deviceId;
+                    o.text = x.label || `Kamera ${idx + 1}`;
+                    s.appendChild(o);
+                });
+
+                // Csak kamera módban indítunk
+                if (currentMode === 'cam') await startCamera();
+
+            } catch (e) {
+                console.error('[CAM] loadCameras error:', e);
+                statusBadge.innerText = 'KAMERA HIBA';
+                statusBadge.style.color = 'red';
+            }
+        }
+
+        async function startCamera() {
+            if (currentMode !== 'cam') return;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.error('[CAM] mediaDevices/getUserMedia not available. Use HTTPS or localhost.');
+                statusBadge.innerText = 'KAMERA NEM ELÉRHETŐ';
+                statusBadge.style.color = 'red';
+                return;
+            }
+
+            const id = document.getElementById('camSelect').value;
+
+            // Előző stream leállítása (különben Safari/Chrome néha nem vált kamerát rendesen)
+            try {
+                if (stream) stream.getTracks().forEach(t => t.stop());
+            } catch (_) { }
+            stream = null;
+
+            try {
+                const constraints = {
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        ...(id ? { deviceId: { exact: id } } : {})
+                    },
+                    audio: false
+                };
+
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                liveVideo.srcObject = stream;
+
+                // iOS/Safari: néha kell explicit play
+                try { await liveVideo.play(); } catch (_) { }
+
+                // Canvas előnézet inicializálás
+                canvas.style.display = 'block';
+                liveVideo.style.display = 'none';
+
+                // Amint megvan a videó metadata, újraszámoljuk a rotate+scale transzformot
+                const onMeta = () => {
+                    liveVideo.removeEventListener('loadedmetadata', onMeta);
+                    applyPreviewAspect();
+                    syncPreviewCanvasToMode(liveVideo);
+                    applyLiveVideoTransform();
+                    drawLivePreviewLoop();
+                };
+                liveVideo.addEventListener('loadedmetadata', onMeta);
+
+                applyPreviewAspect();
+                syncPreviewCanvasToMode(liveVideo);
+                applyLiveVideoTransform();
+                drawLivePreviewLoop();
+
+                statusBadge.innerText = 'KÉSZENLÉT';
+                statusBadge.style.color = '#03dac6';
+
+            } catch (e) {
+                console.error('[CAM] startCamera getUserMedia failed:', e);
+                statusBadge.innerText = 'KAMERA HIBA';
+                statusBadge.style.color = 'red';
+            }
+        }
+
+        // --- 3. EFFEKTEK ---
+        function fmtNum(x, d = 2) {
+            const n = Number(x);
+            if (!isFinite(n)) return '0';
+            return n.toFixed(d).replace(/\.00$/, '.0').replace(/\.(\d)0$/, '.$1');
+        }
+
+        function updateEffectUI() {
+            const tS = document.getElementById('effTimeSlider');
+            const sS = document.getElementById('effSpeedSlider');
+            const tV = document.getElementById('effTimeVal');
+            const sV = document.getElementById('effSpeedVal');
+            if (tS && tV) tV.innerText = `${fmtNum(tS.value, 1)} s`;
+            if (sS && sV) sV.innerText = `${fmtNum(sS.value, 2)}×`;
+            updateSpeedPresetButtons(parseFloat(sS ? sS.value : '1'));
+
+            // Automatikus frissítés: ha van kijelölt szakasz, a csúszka/preset mozgatás azonnal átírja.
+            scheduleAutoApplyToSelected();
+        }
+
+        function updateSpeedPresetButtons(v) {
+            const b05 = document.getElementById('btnSpeed05');
+            const b10 = document.getElementById('btnSpeed10');
+            const b20 = document.getElementById('btnSpeed20');
+            const eq = (a, b) => Math.abs(a - b) < 0.001;
+            if (b05) b05.classList.toggle('active', eq(v, 0.5));
+            if (b10) b10.classList.toggle('active', eq(v, 1.0));
+            if (b20) b20.classList.toggle('active', eq(v, 2.0));
+        }
+
+        // --- AUTO APPLY (kijelölt szakasz azonnali frissítése csúszka/preset mozgatáskor) ---
+        let _autoApplyTimer = 0;
+
+        function scheduleAutoApplyToSelected() {
+            if (selectedEffectIndex < 0 || selectedEffectIndex >= effects.length) return;
+            if (_autoApplyTimer) clearTimeout(_autoApplyTimer);
+            _autoApplyTimer = setTimeout(() => {
+                _autoApplyTimer = 0;
+                applyToSelected();
+            }, 120);
+        }
+
+        function setSpeedPreset(v) {
+            const sS = document.getElementById('effSpeedSlider');
+            if (sS) sS.value = String(v);
+            updateEffectUI();
+            scheduleAutoApplyToSelected();
+        }
+
+        function selectEffect(idx) {
+            if (!Array.isArray(effects) || effects.length === 0) {
+                selectedEffectIndex = -1;
+                return;
+            }
+            if (idx < 0 || idx >= effects.length) {
+                selectedEffectIndex = -1;
+                return;
+            }
+            selectedEffectIndex = idx;
+
+            // csúszkák felvétele a kijelölt szakaszra
+            const tS = document.getElementById('effTimeSlider');
+            const sS = document.getElementById('effSpeedSlider');
+            if (tS) tS.value = String(effects[idx].duration);
+            if (sS) sS.value = String(effects[idx].speed);
+            updateEffectUI();
+            renderList();
+            renderTimeline();
+        }
+
+        function applyToSelected() {
+            if (selectedEffectIndex < 0 || selectedEffectIndex >= effects.length) return;
+            const tS = document.getElementById('effTimeSlider');
+            const sS = document.getElementById('effSpeedSlider');
+            const dur = parseFloat(tS ? tS.value : '0');
+            const spd = parseFloat(sS ? sS.value : '0');
+            if (!isFinite(dur) || dur <= 0) return;
+            if (!isFinite(spd) || spd <= 0) return;
+            effects[selectedEffectIndex] = { duration: dur, speed: spd };
+            renderList();
+            renderTimeline();
+        }
+
+        function addEffect() {
+            const tS = document.getElementById('effTimeSlider');
+            const sS = document.getElementById('effSpeedSlider');
+            const dur = parseFloat(tS ? tS.value : '2');
+            const spd = parseFloat(sS ? sS.value : '1');
+            if (!isFinite(dur) || dur <= 0) return;
+            if (!isFinite(spd) || spd <= 0) return;
+            effects.push({ duration: dur, speed: spd });
+            renderList();
+        }
+
+        function deleteEffect(idx) {
+            if (idx < 0 || idx >= effects.length) return;
+            effects.splice(idx, 1);
+            if (selectedEffectIndex === idx) selectedEffectIndex = -1;
+            else if (selectedEffectIndex > idx) selectedEffectIndex -= 1;
+            renderList();
+        }
+
+        function clearEffects() {
+            effects = [];
+            selectedEffectIndex = -1;
+            renderList();
+        }
+
+        function renderTimeline() {
+            const tl = document.getElementById('effectsTimeline');
+            if (!tl) return;
+
+            if (!Array.isArray(effects) || effects.length === 0) {
+                tl.innerHTML = '<div style="color:#666; font-size:11px; display:flex; align-items:center; justify-content:center; width:100%;">Nincs szakasz – alap 1×</div>';
+                return;
+            }
+
+            const total = effects.reduce((a, b) => a + (Number(b.duration) || 0), 0) || 1;
+
+            tl.innerHTML = effects.map((e, i) => {
+                const dur = Number(e.duration) || 0;
+                const spd = Number(e.speed) || 1;
+                const cls = (spd < 0.99) ? 'slow' : (spd > 1.01 ? 'fast' : 'norm');
+                const sel = (i === selectedEffectIndex) ? 'selected' : '';
+
+                // flex arány: időtartam alapján (minél hosszabb, annál szélesebb szegmens)
+                const flex = Math.max(0.2, dur);
+                const label = `${fmtNum(dur, 1)}s · ${fmtNum(spd, 2)}×`;
+
+                return `<div class="eff-seg ${cls} ${sel}" style="flex:${flex} 1 0%;" title="${label}" onclick="selectEffect(${i})">${fmtNum(spd, 2)}×</div>`;
+            }).join('');
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('effectsList');
+            const sumEl = document.getElementById('effectsSummary');
+            if (!listEl) return;
+
+            renderTimeline();
+
+            listEl.innerHTML = effects.map((e, i) => {
+                const d = fmtNum(e.duration, 1);
+                const s = fmtNum(e.speed, 2);
+                const sel = (i === selectedEffectIndex);
+                return `
+                    <div class="effect-item selectable ${sel ? 'selected' : ''}" onclick="selectEffect(${i})">
+                        <div style="display:flex; gap:8px; align-items:center; min-width:0;">
+                            <div style="font-weight:800; color:#03dac6;">#${i + 1}</div>
+                            <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${d}s → ${s}×</div>
+                        </div>
+                        <button class="eff-del" type="button" onclick="event.stopPropagation(); deleteEffect(${i})">Törlés</button>
+                    </div>
+                `;
+            }).join('');
+
+            const total = effects.reduce((a, b) => a + (Number(b.duration) || 0), 0);
+            if (sumEl) {
+                if (effects.length === 0) {
+                    sumEl.innerText = 'Nincs szakaszlista: alapértelmezett 1× lejátszás.';
+                } else {
+                    sumEl.innerText = `Szakaszok: ${effects.length} db • Össz-idő: ${fmtNum(total, 1)} s (a feldolgozás ideje)`;
+                }
+            }
+        }
+
+        // --- OVERLAY LOADER ---
+        function loadOverlay(i) {
+            overlayReady = false;
+
+            if (!i || !i.files || !i.files[0]) {
+                try {
+                    overlayImg.removeAttribute('src');
+                } catch (_) { }
+                overlayImg.style.display = 'none';
+                return;
+            }
+
+            const file = i.files[0];
+
+            // Csak PNG-t engedünk (különben Safari/Chrome furcsán viselkedhet)
+            if (!file.type || !file.type.toLowerCase().includes('png')) {
+                statusBadge.innerText = 'OVERLAY NEM PNG';
+                statusBadge.style.color = 'red';
+                try {
+                    overlayImg.removeAttribute('src');
+                } catch (_) { }
+                overlayImg.style.display = 'none';
+                return;
+            }
+
+            // Élő előnézet: a videó/canvas fölé tesszük az IMG-t
+            overlayImg.style.display = 'block';
+            overlayImg.style.position = 'absolute';
+            overlayImg.style.left = '0';
+            overlayImg.style.top = '0';
+            overlayImg.style.width = '100%';
+            overlayImg.style.height = '100%';
+            // Illesztés a UI szerint
+            if (overlayFitMode === 'stretch') overlayImg.style.objectFit = 'fill';
+            else if (overlayFitMode === 'contain') overlayImg.style.objectFit = 'contain';
+            else overlayImg.style.objectFit = 'cover';
+            overlayImg.style.pointerEvents = 'none';
+            overlayImg.style.zIndex = '4'; // statusBadge zIndex=5
+
+            overlayImg.onload = () => {
+                overlayReady = true;
+                console.log('[OVERLAY] loaded', overlayImg.naturalWidth, overlayImg.naturalHeight);
+                statusBadge.innerText = 'OVERLAY OK';
+                statusBadge.style.color = '#03dac6';
+            };
+
+            overlayImg.onerror = (e) => {
+                overlayReady = false;
+                console.error('[OVERLAY] load error', e);
+                statusBadge.innerText = 'OVERLAY HIBA';
+                statusBadge.style.color = 'red';
+            };
+
+            const r = new FileReader();
+            r.onload = (e) => {
+                overlayImg.src = e.target.result;
+            };
+            r.onerror = (e) => {
+                overlayReady = false;
+                console.error('[OVERLAY] FileReader error', e);
+                statusBadge.innerText = 'OVERLAY OLVASÁS HIBA';
+                statusBadge.style.color = 'red';
+            };
+            r.readAsDataURL(file);
+        }
+
+        // --- 4. RÖGZÍTÉS (WEBCAM MÓD) ---
+        function initiateCamSequence() {
+            if (!stream) {
+                console.warn('[CAM] No active stream. Trying to start camera...');
+                statusBadge.innerText = 'KAMERA INDÍTÁS...';
+                statusBadge.style.color = 'yellow';
+                loadCameras();
+                return;
+            }
+            document.getElementById('startBtn').disabled = true;
+            statusBadge.innerText = "FELVÉTEL..."; statusBadge.style.color = "red";
+            chunks = [];
+            const pick1 = pickRecorderMime();
+            try {
+                mediaRecorder = new MediaRecorder(stream, { mimeType: pick1.mime, videoBitsPerSecond: 5000000 });
+            } catch (e) {
+                console.error('[REC] MediaRecorder create failed:', e);
+                statusBadge.innerText = 'RÖGZÍTÉS HIBA';
+                statusBadge.style.color = 'red';
+                processText.innerText = 'A böngésző nem tud rögzíteni (MediaRecorder). Safari-ban ez gyakori. Próbáld Chrome-ban, vagy Safari Develop → Experimental Features alatt MediaRecorder/WebRTC opciókat engedélyezni.';
+                document.getElementById('startBtn').disabled = false;
+                return;
+            }
+            mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) };
+            mediaRecorder.onstop = () => {
+                const pick2 = pickRecorderMime();
+                rawVideoBlob = new Blob(chunks, { type: pick2.mime });
+                rawPlayback.src = URL.createObjectURL(rawVideoBlob);
+                startProcessingLoop();
+            };
+            mediaRecorder.start();
+            const dur = parseInt(document.getElementById('recDuration').value) || 4;
+            setTimeout(() => mediaRecorder.stop(), dur * 1000);
+        }
+
+        // --- 5. FŐ FELDOLGOZÓ LOOP (KÖZÖS MINDKÉT MÓDHÓZ) ---
+        async function startProcessingLoop() {
+            isProcessing = true;
+            statusBadge.innerText = "FELDOLGOZÁS..."; statusBadge.style.color = "yellow";
+            progressBarContainer.style.display = 'block';
+            // Kimenet doboz elrejtése feldolgozás alatt
+            if (lastOutputBox) lastOutputBox.style.display = 'none';
+
+            liveVideo.style.display = 'none';
+            canvas.style.display = 'block';
+
+            // Várjuk meg a forrás videó metaadatát, hogy tudjuk a képarányt
+            try {
+                if (rawPlayback.readyState < 1) {
+                    await new Promise((res) => {
+                        const onMeta = () => { rawPlayback.removeEventListener('loadedmetadata', onMeta); res(); };
+                        rawPlayback.addEventListener('loadedmetadata', onMeta);
+                    });
+                }
+            } catch (_) { }
+
+            const srcW = rawPlayback.videoWidth || 1280;
+            const srcH = rawPlayback.videoHeight || 720;
+            const chosen = chooseCanvasSizeByMode(srcW, srcH);
+
+            // Canvas fix méret beállítás (a mentett videó képaránya IS EZ LESZ)
+            canvas.width = chosen.w;
+            canvas.height = chosen.h;
+            setVideoContainerAspectFromCanvas();
+
+            // Zene
+            const m = document.getElementById('musicFile');
+            let actx, dest, src, hasA = false;
+            if (m.files[0]) {
+                hasA = true; actx = new (window.AudioContext || window.webkitAudioContext)();
+                const b = await m.files[0].arrayBuffer();
+                const d = await actx.decodeAudioData(b);
+                dest = actx.createMediaStreamDestination();
+                src = actx.createBufferSource(); src.buffer = d; src.loop = true; src.connect(dest);
+            }
+
+            const cStream = canvas.captureStream(30);
+            if (hasA) cStream.addTrack(dest.stream.getAudioTracks()[0]);
+
+            const pick3 = pickRecorderMime();
+            let rec;
+            try {
+                rec = new MediaRecorder(cStream, { mimeType: pick3.mime, videoBitsPerSecond: 5000000 });
+            } catch (e) {
+                console.error('[REC] MediaRecorder(captureStream) create failed:', e);
+                statusBadge.innerText = 'RENDER HIBA';
+                statusBadge.style.color = 'red';
+                progressBarContainer.style.display = 'none';
+                processText.innerText = 'A böngésző nem tud canvas streamet rögzíteni. Safari-ban ez verziófüggő. Használj Chrome-ot a biztos működéshez.';
+                resetUI();
+                if (actx) actx.close();
+                return;
+            }
+            const fChunks = [];
+            rec.ondataavailable = e => { if (e.data.size > 0) fChunks.push(e.data) };
+            rec.onstop = () => {
+                const pick4 = pickRecorderMime();
+                const outBlob = new Blob(fChunks, { type: pick4.mime });
+                const url = URL.createObjectURL(outBlob);
+
+                // Mutassuk meg az oldalon is (mert a macOS sokszor nem nyitja meg a .webm-et)
+                setLastOutput(url, pick4.mime, pick4.ext, outBlob.size);
+
+                // Azonnali letöltés (marad, de már a választott kiterjesztéssel)
+                const a = document.createElement('a');
+                const now = new Date();
+                a.href = url;
+                a.download = `360_Video_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.${pick4.ext}`;
+                a.click();
+
+                sendToProjector(url);
+                resetUI();
+                if (actx) actx.close();
+            };
+
+            rec.start();
+            if (hasA) src.start(0);
+
+            await rawPlayback.play();
+            let plan = effects.length > 0 ? effects : [{ duration: 100, speed: 1 }];
+            if (document.getElementById('boomerangMode').checked) plan = [...plan, ...plan];
+
+            let tDur = 0; plan.forEach(p => tDur += p.duration);
+            let el = 0;
+
+            for (const seg of plan) {
+                rawPlayback.playbackRate = seg.speed;
+                const s = Date.now();
+                const d = seg.duration * 1000;
+                while (Date.now() - s < d) {
+                    drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
+                    // Overlay: stabilan csak akkor rajzoljuk, ha betöltött; fallback naturalWidth alapján
+                    if (overlayReady || (overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalHeight > 0)) {
+                        try {
+                            if (overlayFitMode === 'stretch') {
+                                // Pont a szélekhez: torzíthat (de ez a cél)
+                                ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
+                            } else {
+                                // contain/cover: arányt tartunk, és középre tesszük
+                                const iw = overlayImg.naturalWidth;
+                                const ih = overlayImg.naturalHeight;
+                                const dstW = canvas.width;
+                                const dstH = canvas.height;
+                                const iAsp = iw / ih;
+                                const dAsp = dstW / dstH;
+
+                                let dw, dh;
+                                if (overlayFitMode === 'contain') {
+                                    if (iAsp > dAsp) { dw = dstW; dh = Math.round(dstW / iAsp); }
+                                    else { dh = dstH; dw = Math.round(dstH * iAsp); }
+                                } else {
+                                    // cover
+                                    if (iAsp > dAsp) { dh = dstH; dw = Math.round(dstH * iAsp); }
+                                    else { dw = dstW; dh = Math.round(dstW / iAsp); }
+                                }
+                                const dx = Math.round((dstW - dw) / 2);
+                                const dy = Math.round((dstH - dh) / 2);
+                                ctx.drawImage(overlayImg, dx, dy, dw, dh);
+                            }
+                        } catch (e) {
+                            console.warn('[OVERLAY] drawImage failed:', e);
+                        }
+                    }
+
+                    el += 0.033;
+                    const p = Math.min((el / tDur) * 100, 100);
+                    progressBar.style.width = p + "%";
+                    processText.innerText = Math.round(p) + "%";
+
+                    await new Promise(r => setTimeout(r, 33));
+                    if (rawPlayback.ended) {
+                        if (document.getElementById('boomerangMode').checked) { rawPlayback.currentTime = 0; await rawPlayback.play(); }
+                        else break;
+                    }
+                }
+            }
+            rec.stop();
+            rawPlayback.pause();
+        }
+
+        function resetUI() {
+            isProcessing = false;
+            progressBarContainer.style.display = 'none'; progressBar.style.width = "0%"; processText.innerText = "";
+            document.getElementById('startBtn').disabled = false;
+            statusBadge.innerText = "KÉSZENLÉT"; statusBadge.style.color = "#03dac6";
+            if (currentMode === 'cam') {
+                // Kamerán a preview maradjon a canvas-on
+                liveVideo.style.display = 'none';
+                canvas.style.display = 'block';
+                syncPreviewCanvasToMode(liveVideo);
+                drawLivePreviewLoop();
+            }
+            else { canvas.style.display = 'block'; } // Fájl módban maradjon a canvas a legutolsó képpel
+
+            // A kimenet doboz maradhat látható a végén, de felvételkor/feldolgozáskor elrejtjük.
+        }
+
+        // Kamerák betöltése csak user gesture után (pl. módváltás / gombnyomás), különben a böngésző blokkolhatja.
+        applyOutputAspectFromUI();
+        document.body.setAttribute('data-aspect', outputAspectMode);
+        applyOverlayFitFromUI();
+        applySourceRotateFromUI();
+        applyLastOutputAspectFromMode();
+        syncLastOutputWidth();
+        window.addEventListener('resize', () => {
+            applyPreviewAspect();
+            if (currentMode === 'cam') {
+                syncPreviewCanvasToMode(liveVideo);
+            }
+            requestAnimationFrame(() => applyLiveVideoTransform());
+            setTimeout(applyLiveVideoTransform, 0);
+            setTimeout(applyLiveVideoTransform, 50);
+            syncLastOutputWidth();
+        });
+        effects.push({ duration: 2, speed: 0.5 });
+        renderList();
+
+        // Effektek UI init + élő frissítés
+        (function initEffectsUI() {
+            const tS = document.getElementById('effTimeSlider');
+            const sS = document.getElementById('effSpeedSlider');
+            if (tS) tS.addEventListener('input', updateEffectUI);
+            if (sS) sS.addEventListener('input', updateEffectUI);
+            updateEffectUI();
+            renderTimeline();
+        })();
+
+        window.addEventListener('beforeunload', () => {
+            stopLivePreviewLoop();
+            try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch (_) { }
+        });
+    </script>
+</body>
+
+</html>
