@@ -294,15 +294,10 @@
 
         .eff-toprow {
             display: grid;
-            /* Nagy kijelzőn is kompakt: címke + slider + érték egymás mellett */
-            grid-template-columns:
-                auto
-                minmax(0, 1fr)
-                auto
-                12px
-                auto
-                minmax(0, 1fr)
-                auto;
+            grid-template-columns: clamp(72px, 10vw, 92px) minmax(0, 1fr) clamp(56px, 10vw, 84px);
+            grid-template-areas:
+                "tlabel tslider tval"
+                "slabel sslider sval";
             column-gap: 12px;
             row-gap: 10px;
             align-items: center;
@@ -352,7 +347,16 @@
             background: #2a2a2a;
             justify-self: center;
             border-radius: 1px;
+            display: none; /* alapból rejtve: iPad-en ne jelenjen meg árva csík */
         }
+
+        /* grid-area kötés a két soros eff-toprow-hoz */
+        .eff-time-label  { grid-area: tlabel; }
+        .eff-time-slider { grid-area: tslider; }
+        .eff-time-value  { grid-area: tval; }
+        .eff-speed-label { grid-area: slabel; }
+        .eff-speed-slider{ grid-area: sslider; }
+        .eff-speed-value { grid-area: sval; }
 
         .eff-bottomrow {
             display: flex;
@@ -406,17 +410,8 @@
         /* Szűkebb nézet: a két sor marad, csak a felső grid törik */
         @media (max-width: 1100px) {
             .eff-toprow {
-                grid-template-columns: clamp(64px, 10vw, 88px) minmax(140px, 1fr) clamp(56px, 10vw, 80px);
-            }
-
-            .eff-divider {
-                display: none;
-            }
-
-            .eff-toprow .eff-speed-label,
-            .eff-toprow .eff-speed-slider,
-            .eff-toprow .eff-speed-value {
-                grid-column: 1 / -1;
+                column-gap: 10px;
+                row-gap: 10px;
             }
         }
 
@@ -424,24 +419,30 @@
         @media (max-width: 700px) {
             .eff-toprow {
                 grid-template-columns: 1fr;
-            }
-
-            .eff-toprow .eff-label {
-                grid-column: 1 / -1;
-            }
-
-            .eff-toprow .eff-slider {
-                grid-column: 1 / -1;
-                min-width: 0;
-            }
-
-            .eff-toprow .eff-value {
-                grid-column: 1 / -1;
-                justify-self: end;
+                grid-template-areas:
+                    "tlabel"
+                    "tslider"
+                    "tval"
+                    "slabel"
+                    "sslider"
+                    "sval";
             }
 
             .eff-divider {
                 display: none;
+            }
+        }
+        @media (min-width: 1400px) {
+            .eff-toprow {
+                grid-template-columns:
+                    clamp(72px, 8vw, 92px) minmax(0, 1fr) clamp(56px, 8vw, 84px)
+                    12px
+                    clamp(72px, 8vw, 92px) minmax(0, 1fr) clamp(56px, 8vw, 84px);
+                grid-template-areas: "tlabel tslider tval divider slabel sslider sval";
+            }
+            .eff-divider {
+                display: block;
+                grid-area: divider;
             }
         }
 
@@ -458,8 +459,8 @@
             }
         }
 
-        /* Mobil / tablet (iPad/iPhone): panelek egymás alatt, különben a jobb panel túl keskeny és a timeline/lista eltűnik */
-        @media (max-width: 1024px) {
+        /* Mobil / tablet (iPad/iPhone): panelek egymás alatt PORTRAIT-ban */
+        @media (max-width: 1024px) and (orientation: portrait) {
             body {
                 overflow: auto;
             }
@@ -486,14 +487,99 @@
                 min-height: 0;
             }
 
-            /* Timeline és lista biztosan kapjon helyet */
+            /* Effektek: iPad portraitban ne lógjon ki semmi, és legyen mindig látható a timeline */
+            .eff-divider { display: none !important; }
+
+            .eff-bottomrow {
+                flex-wrap: nowrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            .eff-preset,
+            .eff-actions {
+                flex-wrap: nowrap;
+                gap: 6px;
+            }
+            .eff-actions button,
+            .eff-preset button {
+                padding: 7px 9px;
+                font-size: 12px;
+            }
+
             #effectsTimeline {
                 min-height: 34px;
+                height: 34px;
                 flex: 0 0 auto;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
             }
 
             #effectsList.scroll-area {
                 max-height: 32dvh;
+                min-height: 140px;
+                overflow-y: auto;
+            }
+        }
+
+        /* iPad / tablet LANDSCAPE: marad a 3 oszlop, csak kompaktabb paddings + biztos scroll */
+        @media (max-width: 1366px) and (orientation: landscape) {
+            body {
+                overflow: hidden;
+            }
+
+            .left-panel,
+            .right-panel {
+                width: 32%;
+            }
+
+            .center-panel {
+                width: 36%;
+            }
+
+            .panel {
+                padding: 14px;
+                gap: 10px;
+            }
+
+            .app-header {
+                font-size: 20px;
+                margin-bottom: 14px;
+            }
+
+            .btn-start {
+                height: 54px;
+                font-size: 17px;
+            }
+
+            /* Effektek: a függőleges elválasztó ne jelenjen meg ezen a méreten (csík bug) */
+            .eff-divider { display: none !important; }
+
+            /* iPad-on a hosszú listák legyenek görgethetők a panelen belül */
+            #effectsTimeline {
+                min-height: 34px;
+                height: 34px;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            #effectsList.scroll-area {
+                max-height: 28vh;
+                min-height: 140px;
+                overflow-y: auto;
+            }
+
+            /* Gombok egy sorban maradjanak */
+            .eff-bottomrow {
+                flex-wrap: nowrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+            .eff-preset,
+            .eff-actions {
+                flex-wrap: nowrap;
+                gap: 6px;
             }
         }
 
@@ -513,6 +599,9 @@
             height: 34px;
             display: flex;
             width: 100%;
+            min-width: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
             border: 1px solid #333;
             border-radius: 8px;
             overflow: hidden;
@@ -522,6 +611,7 @@
 
         .eff-seg {
             display: flex;
+            flex: 0 0 auto;
             align-items: center;
             justify-content: center;
             font-size: 11px;
@@ -638,7 +728,7 @@
             <label>Overlay Keret</label>
             <input type="file" id="overlayFile" accept="image/png" onchange="loadOverlay(this)">
             <label>Zene (.mp3)</label>
-            <input type="file" id="musicFile" accept="audio/*">
+            <input type="file" id="musicFile" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg">
         </div>
 
         <!-- KÖZÉP PANEL -->
@@ -748,16 +838,16 @@
 
             <div class="eff-compact">
                 <div class="eff-toprow">
-                    <div class="eff-label">Szakasz</div>
-                    <input class="eff-slider" type="range" id="effTimeSlider" min="0.5" max="10" step="0.5" value="2">
-                    <div class="eff-value" id="effTimeVal">2.0 s</div>
+                    <div class="eff-label eff-time-label">Szakasz</div>
+                    <input class="eff-slider eff-time-slider" type="range" id="effTimeSlider" min="0.5" max="10" step="0.5" value="2">
+                    <div class="eff-value eff-time-value" id="effTimeVal">2.0 s</div>
 
                     <div class="eff-divider" aria-hidden="true"></div>
 
-                    <div class="eff-label">Seb.</div>
-                    <input class="eff-slider" type="range" id="effSpeedSlider" min="0.25" max="3" step="0.05"
+                    <div class="eff-label eff-speed-label">Seb.</div>
+                    <input class="eff-slider eff-speed-slider" type="range" id="effSpeedSlider" min="0.25" max="3" step="0.05"
                         value="0.5">
-                    <div class="eff-value" id="effSpeedVal">0.5×</div>
+                    <div class="eff-value eff-speed-value" id="effSpeedVal">0.5×</div>
                 </div>
 
                 <div class="eff-bottomrow">
@@ -1569,7 +1659,9 @@
             const file = i.files[0];
 
             // Csak PNG-t engedünk (különben Safari/Chrome furcsán viselkedhet)
-            if (!file.type || !file.type.toLowerCase().includes('png')) {
+            const nameOk = (file.name || '').toLowerCase().endsWith('.png');
+            const typeOk = (file.type || '').toLowerCase().includes('png');
+            if (!nameOk && !typeOk) {
                 statusBadge.innerText = 'OVERLAY NEM PNG';
                 statusBadge.style.color = 'red';
                 try {
