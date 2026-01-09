@@ -4,16 +4,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie - KANDO BOOTH</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>360 selfie • v1.2.2 • S.P.</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-0: #0a0f14;
+            --bg-1: #0f151d;
+            --bg-2: #141c26;
+            --panel: #10161f;
+            --panel-2: #0c121a;
+            --border: #222c3a;
+            --text: #e6edf3;
+            --muted: #9aa4b2;
+            --accent: #23d7b5;
+            --accent-2: #5eead4;
+            --danger: #ff5c7c;
+            --shadow: rgba(0, 0, 0, 0.45);
+            --ui-scale: 1;
+        }
+
         /* --- DESIGN --- */
         body {
             margin: 0;
             padding: 0;
-            background: #0f0f0f;
-            color: #eee;
-            font-family: 'Segoe UI', sans-serif;
+            background:
+                radial-gradient(900px 500px at 18% -10%, rgba(35, 215, 181, 0.12), transparent 60%),
+                radial-gradient(800px 420px at 85% 20%, rgba(94, 234, 212, 0.08), transparent 55%),
+                var(--bg-0);
+            color: var(--text);
+            font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
             height: 100dvh;
             display: flex;
             overflow: hidden; /* keep horizontal/overall lock */
@@ -26,6 +46,10 @@
             width: 100%;
             height: 100dvh;
             min-height: 0;
+            transform-origin: top left;
+            transform: scale(var(--ui-scale));
+            width: calc(100% / var(--ui-scale));
+            height: calc(100dvh / var(--ui-scale));
         }
 
         .panel {
@@ -37,20 +61,21 @@
             overflow-y: auto;
             min-height: 0; /* critical for flex children to be scrollable on mobile */
             -webkit-overflow-scrolling: touch;
+            background: var(--panel);
         }
 
         .left-panel {
             width: 28%;
-            background: #181818;
-            border-right: 1px solid #333;
+            background: linear-gradient(180deg, var(--panel), var(--panel-2));
+            border-right: 1px solid var(--border);
             z-index: 2;
-            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.5);
+            box-shadow: 5px 0 18px var(--shadow);
             padding-bottom: calc(20px + env(safe-area-inset-bottom));
         }
 
         .center-panel {
             width: 44%;
-            background: #000;
+            background: var(--bg-1);
             align-items: center;
             justify-content: center;
             position: relative;
@@ -62,26 +87,25 @@
 
         .right-panel {
             width: 28%;
-            background: #181818;
-            border-left: 1px solid #333;
+            background: linear-gradient(180deg, var(--panel), var(--panel-2));
+            border-left: 1px solid var(--border);
         }
 
         .app-header {
             font-size: 24px;
-            font-weight: 800;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 2px;
+            letter-spacing: 2.5px;
             margin-bottom: 20px;
             text-align: center;
-            background: linear-gradient(90deg, #fff, #03dac6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text);
+            text-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
         }
 
         h3 {
             margin: 0 0 5px 0;
-            color: #03dac6;
-            border-bottom: 1px solid #333;
+            color: var(--accent);
+            border-bottom: 1px solid var(--border);
             padding-bottom: 5px;
             text-transform: uppercase;
             font-size: 12px;
@@ -90,11 +114,54 @@
 
         label {
             font-size: 11px;
-            color: #888;
+            color: var(--muted);
             text-transform: uppercase;
             margin-top: 8px;
             display: block;
-            font-weight: bold;
+            font-weight: 600;
+        }
+
+        .inline-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .inline-row input[type="file"] {
+            flex: 1 1 auto;
+        }
+
+        .btn-clear {
+            width: auto;
+            padding: 8px 10px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .date-offset-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .date-offset-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .date-offset-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
         }
 
         input,
@@ -102,13 +169,26 @@
         button {
             width: 100%;
             padding: 10px;
-            background: #252525;
-            border: 1px solid #333;
-            color: #fff;
-            border-radius: 4px;
+            background: #151d28;
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
             box-sizing: border-box;
             margin-bottom: 4px;
             font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+        }
+
+        input:focus,
+        select:focus,
+        button:focus {
+            outline: none;
+            border-color: rgba(35, 215, 181, 0.6);
+        }
+
+        button:active {
+            transform: translateY(1px);
         }
 
         /* Range (slider) inputs must not inherit padding from the generic input rule */
@@ -126,32 +206,33 @@
             display: flex;
             gap: 10px;
             margin-bottom: 10px;
-            background: #222;
+            background: #121926;
             padding: 5px;
-            border-radius: 5px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
         }
 
         .mode-btn {
             flex: 1;
             border: none;
             background: transparent;
-            color: #666;
+            color: var(--muted);
             cursor: pointer;
             padding: 8px;
-            font-weight: bold;
+            font-weight: 700;
         }
 
         .mode-btn.active {
-            background: #03dac6;
-            color: #000;
-            border-radius: 4px;
+            background: linear-gradient(135deg, var(--accent), #18b79a);
+            color: #051418;
+            border-radius: 6px;
         }
 
         /* DROP ZONE */
         #dropZone {
-            border: 2px dashed #444;
-            background: #1a1a1a;
-            color: #aaa;
+            border: 2px dashed #2c394a;
+            background: #0f141d;
+            color: var(--muted);
             height: 150px;
             display: flex;
             flex-direction: column;
@@ -164,14 +245,14 @@
         }
 
         #dropZone:hover {
-            border-color: #03dac6;
-            background: #222;
-            color: #fff;
+            border-color: var(--accent);
+            background: #141c26;
+            color: var(--text);
         }
 
         #dropZone.dragover {
-            border-color: #03dac6;
-            background: #2a2a2a;
+            border-color: var(--accent);
+            background: #1a2431;
         }
 
         /* VIDEÓ */
@@ -182,11 +263,11 @@
             aspect-ratio: 16 / 9;
             /* alap: fekvő konténer */
             max-height: 70vh;
-            background: #000;
+            background: #0a0f14;
             border: none;
-            box-shadow: inset 0 0 0 2px #333;
+            box-shadow: inset 0 0 0 2px var(--border);
             overflow: hidden;
-            border-radius: 8px;
+            border-radius: 12px;
             will-change: transform;
             margin: 0 auto;
         }
@@ -222,11 +303,11 @@
             right: 15px;
             padding: 6px 12px;
             background: rgba(0, 0, 0, 0.8);
-            border-radius: 20px;
+            border-radius: 999px;
             font-size: 11px;
-            color: #03dac6;
+            color: var(--accent);
             z-index: 5;
-            border: 1px solid #333;
+            border: 1px solid var(--border);
             text-transform: uppercase;
             font-weight: bold;
         }
@@ -234,7 +315,7 @@
         #progressBarContainer {
             width: 100%;
             height: 4px;
-            background: #222;
+            background: #101720;
             margin-top: 15px;
             border-radius: 2px;
             display: none;
@@ -244,12 +325,12 @@
         #progressBar {
             width: 0%;
             height: 100%;
-            background: #03dac6;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
             transition: width 0.2s;
         }
 
         .btn-start {
-            background: linear-gradient(135deg, #03dac6, #00695c);
+            background: linear-gradient(135deg, var(--accent), #149e86);
             color: #fff;
             height: 60px;
             font-size: 18px;
@@ -257,28 +338,30 @@
             margin-top: 15px;
             font-weight: bold;
             cursor: pointer;
-            border-radius: 8px;
+            border-radius: 10px;
         }
 
         .btn-projector {
-            background: #6200ee;
+            background: #152033;
             color: #fff;
-            border: none;
+            border: 1px solid var(--border);
             cursor: pointer;
+            font-weight: 700;
         }
 
         .scroll-area {
             max-height: 150px;
             overflow-y: auto;
-            border: 1px solid #333;
-            background: #121212;
+            border: 1px solid var(--border);
+            background: #0c121a;
             padding: 5px;
+            border-radius: 8px;
         }
 
         .effect-item {
             font-size: 12px;
             padding: 6px 8px;
-            border-bottom: 1px solid #222;
+            border-bottom: 1px solid #1b2430;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -309,9 +392,9 @@
 
         .eff-label {
             font-size: 11px;
-            color: #888;
+            color: var(--muted);
             text-transform: uppercase;
-            font-weight: bold;
+            font-weight: 700;
             margin: 0;
             white-space: nowrap;
             letter-spacing: 0.8px;
@@ -320,7 +403,7 @@
 
         .eff-value {
             font-size: 12px;
-            color: #03dac6;
+            color: var(--accent);
             font-weight: 800;
             white-space: nowrap;
             overflow: hidden;
@@ -345,7 +428,7 @@
         .eff-divider {
             width: 1px;
             height: 18px;
-            background: #2a2a2a;
+            background: #263244;
             justify-self: center;
             border-radius: 1px;
             display: none; /* alapból rejtve: iPad-en ne jelenjen meg árva csík */
@@ -377,19 +460,19 @@
         .eff-preset button {
             width: auto;
             padding: 6px 8px;
-            background: #252525;
-            border: 1px solid #333;
+            background: #151d28;
+            border: 1px solid var(--border);
             border-radius: 6px;
             cursor: pointer;
             font-weight: 800;
-            color: #eee;
+            color: var(--text);
             font-size: 12px;
             line-height: 1;
         }
 
         .eff-preset button.active {
-            background: #03dac6;
-            color: #000;
+            background: var(--accent);
+            color: #071216;
             border: none;
         }
 
@@ -467,9 +550,13 @@
             }
 
             .container {
-                flex-direction: column;
-                height: 100dvh;
-                min-height: 0;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                grid-template-rows: auto 1fr;
+                gap: 12px;
+                padding: 10px;
+                height: auto;
+                min-height: 100dvh;
             }
 
             .left-panel,
@@ -479,13 +566,25 @@
             }
 
             /* Videó előnézet felül, majd Branding/Média, majd Effektek */
-            .center-panel { order: 0; }
-            .left-panel   { order: 1; }
-            .right-panel  { order: 2; }
+            .center-panel {
+                order: 0;
+                grid-column: 1 / -1;
+                align-items: stretch;
+            }
+            .left-panel {
+                order: 1;
+                grid-column: 1;
+            }
+            .right-panel {
+                order: 2;
+                grid-column: 2;
+            }
 
             /* iOS/Safari flex+scroll stabilizálás */
             .panel {
                 min-height: 0;
+                padding: 14px;
+                gap: 10px;
             }
 
             /* Effektek: iPad portraitban ne lógjon ki semmi, és legyen mindig látható a timeline */
@@ -523,19 +622,39 @@
             }
         }
 
-        /* iPad / tablet LANDSCAPE: marad a 3 oszlop, csak kompaktabb paddings + biztos scroll */
+        /* iPad / tablet LANDSCAPE: 2 oszlopos grid, preview bal fent, branding alatta, vezérlők jobbra */
         @media (max-width: 1366px) and (orientation: landscape) {
             body {
-                overflow: hidden;
+                overflow: auto;
             }
 
-            .left-panel,
-            .right-panel {
-                width: 32%;
+            .container {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 360px;
+                grid-template-rows: auto 1fr;
+                gap: 12px;
+                padding: 10px;
+                height: auto;
+                min-height: 100dvh;
             }
 
             .center-panel {
-                width: 36%;
+                grid-column: 1;
+                grid-row: 1;
+                align-items: stretch;
+                width: auto;
+            }
+
+            .left-panel {
+                grid-column: 1;
+                grid-row: 2;
+                width: auto;
+            }
+
+            .right-panel {
+                grid-column: 2;
+                grid-row: 1 / span 2;
+                width: auto;
             }
 
             .panel {
@@ -584,8 +703,107 @@
             }
         }
 
+        /* Telefon LANDSCAPE: 3 oszlop, mindhárom panel scrollozható, gomb sticky */
+        @media (max-width: 900px) and (orientation: landscape) {
+            body {
+                overflow: hidden;
+            }
+
+            .container {
+                display: flex;
+                flex-direction: row;
+                height: 100dvh;
+                gap: 8px;
+                padding: 8px;
+            }
+
+            .left-panel,
+            .center-panel,
+            .right-panel {
+                height: 100%;
+                width: 33.33%;
+            }
+
+            .panel {
+                padding: 10px;
+                gap: 8px;
+                overflow-y: auto;
+            }
+
+            .app-header {
+                font-size: 16px;
+                margin-bottom: 8px;
+            }
+
+            #videoContainer {
+                max-height: 48vh;
+            }
+
+            input,
+            select,
+            button {
+                padding: 7px;
+                font-size: 12px;
+            }
+
+            .btn-start {
+                height: 46px;
+                font-size: 15px;
+                position: sticky;
+                bottom: 8px;
+                z-index: 3;
+            }
+        }
+
         /* Kisebb mobilon még kompaktabb */
         @media (max-width: 700px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+                gap: 10px;
+            }
+
+            .center-panel,
+            .left-panel,
+            .right-panel {
+                grid-column: 1;
+            }
+
+            .panel {
+                padding: 12px;
+                gap: 8px;
+            }
+
+            .app-header {
+                font-size: 18px;
+                margin-bottom: 10px;
+            }
+
+            h3 {
+                font-size: 11px;
+            }
+
+            label {
+                font-size: 10px;
+            }
+
+            input,
+            select,
+            button {
+                padding: 8px;
+                font-size: 12px;
+            }
+
+            .btn-start {
+                height: 50px;
+                font-size: 16px;
+            }
+
+            #videoContainer {
+                max-height: 45vh;
+                border-radius: 10px;
+            }
+
             #effectsList.scroll-area {
                 max-height: 28dvh;
             }
@@ -603,10 +821,10 @@
             min-width: 0;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            border: 1px solid #333;
+            border: 1px solid var(--border);
             border-radius: 8px;
             overflow: hidden;
-            background: #121212;
+            background: #0c121a;
             margin-top: 10px;
         }
 
@@ -619,7 +837,7 @@
             letter-spacing: 0.3px;
             cursor: pointer;
             user-select: none;
-            border-right: 1px solid #222;
+            border-right: 1px solid #1b2430;
             color: #ddd;
             padding: 0 6px;
             min-width: 18px;
@@ -630,7 +848,7 @@
         }
 
         .eff-seg.slow {
-            background: rgba(3, 218, 198, 0.18);
+            background: rgba(35, 215, 181, 0.18);
         }
 
         .eff-seg.norm {
@@ -638,11 +856,11 @@
         }
 
         .eff-seg.fast {
-            background: rgba(98, 0, 238, 0.22);
+            background: rgba(94, 234, 212, 0.18);
         }
 
         .eff-seg.selected {
-            outline: 2px solid #03dac6;
+            outline: 2px solid var(--accent);
             outline-offset: -2px;
         }
 
@@ -652,15 +870,15 @@
         }
 
         .effect-item.selectable.selected {
-            background: rgba(3, 218, 198, 0.10);
+            background: rgba(35, 215, 181, 0.10);
         }
 
         .eff-del {
             width: auto;
             padding: 6px 8px;
             background: transparent;
-            border: 1px solid #333;
-            color: #aaa;
+            border: 1px solid var(--border);
+            color: var(--muted);
             border-radius: 6px;
             cursor: pointer;
             font-size: 11px;
@@ -668,7 +886,7 @@
 
         #effectsSummary {
             font-size: 11px;
-            color: #888;
+            color: var(--muted);
             margin-top: 6px;
             line-height: 1.25;
         }
@@ -708,6 +926,7 @@
                 max-height: 24vh;
             }
         }
+
     </style>
 </head>
 
@@ -727,9 +946,38 @@
 
             <h3>2. Média elemek</h3>
             <label>Overlay Keret</label>
-            <input type="file" id="overlayFile" accept="image/png" onchange="loadOverlay(this)">
+            <div class="inline-row">
+                <input type="file" id="overlayFile" accept="image/png" onchange="loadOverlay(this)">
+                <button class="btn-clear" type="button" onclick="clearOverlay()">X</button>
+            </div>
             <label>Zene (.mp3)</label>
             <input type="file" id="musicFile" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg">
+            <label style="margin-top:10px; display:flex; align-items:center;">
+                <input type="checkbox" id="dateOverlay" style="width:auto; margin-right:8px;"> Dátum overlay
+            </label>
+            <label>Dátum pozíció</label>
+            <select id="dateOverlayPos" onchange="updateDateOverlayPreview()">
+                <option value="br" selected>Jobb alsó</option>
+                <option value="bl">Bal alsó</option>
+                <option value="tr">Jobb felső</option>
+                <option value="tl">Bal felső</option>
+            </select>
+            <div class="date-offset-row">
+                <div class="date-offset-item">
+                    <div class="date-offset-head">
+                        <span>X offset</span>
+                        <span id="dateOverlayOffsetXVal">18</span>
+                    </div>
+                    <input type="range" id="dateOverlayOffsetX" min="0" max="240" step="2" value="18" oninput="updateDateOverlayPreview()">
+                </div>
+                <div class="date-offset-item">
+                    <div class="date-offset-head">
+                        <span>Y offset</span>
+                        <span id="dateOverlayOffsetYVal">18</span>
+                    </div>
+                    <input type="range" id="dateOverlayOffsetY" min="0" max="240" step="2" value="18" oninput="updateDateOverlayPreview()">
+                </div>
+            </div>
         </div>
 
         <!-- KÖZÉP PANEL -->
@@ -877,7 +1125,6 @@
             </label>
         </div>
     </div>
-
     <script>
         // --- VÁLTOZÓK ---
         let currentMode = 'cam'; // 'cam' vagy 'file'
@@ -889,6 +1136,7 @@
         let selectedEffectIndex = -1;
         let isProcessing = false;
         let rawVideoBlob = null;
+        let rawVideoUrl = null;
         let currentLogoData = null;
 
         // Overlay betöltés állapot (stabil rajzolás + debug)
@@ -1017,6 +1265,7 @@
             requestAnimationFrame(() => applyLiveVideoTransform());
             setTimeout(applyLiveVideoTransform, 0);
             setTimeout(applyLiveVideoTransform, 50);
+            updateDateOverlayPreview();
         }
 
         function applyOverlayFitFromUI() {
@@ -1153,6 +1402,9 @@
             try {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 drawVideoCoverRotated(ctx, liveVideo, canvas.width, canvas.height, getEffectiveRotateDeg(liveVideo));
+                if (isDateOverlayEnabled()) {
+                    drawDateStamp(ctx, canvas.width, canvas.height);
+                }
             } catch (e) {
                 // ne öljük meg a loopot
                 console.warn('[PREVIEW] draw failed:', e);
@@ -1329,13 +1581,19 @@
             if (input.files[0]) processImportedFile(input.files[0]);
         }
 
+        function setRawPlaybackSource(blob) {
+            try { if (rawVideoUrl) URL.revokeObjectURL(rawVideoUrl); } catch (_) { }
+            rawVideoUrl = URL.createObjectURL(blob);
+            rawPlayback.src = rawVideoUrl;
+        }
+
         async function processImportedFile(file) {
             statusBadge.innerText = "FÁJL BETÖLTVE";
             statusBadge.style.color = "#fff";
 
             // Blob létrehozása a fájlból
             rawVideoBlob = file;
-            rawPlayback.src = URL.createObjectURL(rawVideoBlob);
+            setRawPlaybackSource(rawVideoBlob);
 
             // Azonnali indítás
             startProcessingLoop();
@@ -1359,10 +1617,167 @@
         }
         function openProjectorWindow() {
             if (projectorWin && !projectorWin.closed) { projectorWin.focus(); return; }
-            // (A korábbi kivetítő HTML kódja változatlan, itt egyszerűsítve hívom meg)
-            const displayHTML = `<!DOCTYPE html><html lang="hu"><head><meta charset="UTF-8"><title>360 Booth - Kivetítő</title><style>body{margin:0;background:#000;color:#fff;font-family:sans-serif;display:grid;grid-template-columns:75% 25%;height:100vh;overflow:hidden}#main{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle,#1a1a1a 0%,#000 100%)}#side{background:#111;border-left:1px solid #333;padding:20px;display:flex;flex-direction:column;align-items:center}video{max-width:90%;border:1px solid #333;border-radius:10px}.g-item{width:100%;margin-bottom:10px;border:1px solid #333;border-radius:5px;cursor:pointer}.g-item video{width:100%;display:block}</style></head><body><div id="main"><h1 id="title" style="text-transform:uppercase;letter-spacing:4px">360 Booth</h1><img id="logo" style="max-height:80px;margin-bottom:20px;display:none"><video id="disp" controls autoplay loop style="display:none"></video><h2 id="wait">Várakozás...</h2></div><div id="side"><h3>Galéria</h3><div id="gal" style="width:100%;overflow-y:auto"></div></div><script>window.addEventListener('message',e=>{const d=e.data;if(d.type==='updateBrand'){document.getElementById('title').innerText=d.title;if(d.logo){document.getElementById('logo').src=d.logo;document.getElementById('logo').style.display='block'}else{document.getElementById('logo').style.display='none'}}if(d.type==='newVideo'){document.getElementById('wait').style.display='none';const v=document.getElementById('disp');v.style.display='block';v.src=d.url;v.play();const g=document.createElement('div');g.className='g-item';g.innerHTML='<video src="'+d.url+'" muted></video>';g.onclick=()=>{v.src=d.url;v.play()};document.getElementById('gal').prepend(g)}})<\/script></body></html>`;
+            const displayHTML = `<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>360 Booth - Kivetítő</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+    :root{
+      --bg-0:#0a0f14;--bg-1:#0f151d;--panel:#0f141d;--border:#1e2a38;--text:#e6edf3;--muted:#9aa4b2;--accent:#23d7b5;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:'Space Grotesk',sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(900px 500px at 10% -10%, rgba(35,215,181,.12), transparent 60%),
+        var(--bg-0);
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 320px;
+      height:100vh;
+      overflow:hidden;
+    }
+    #main{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:28px;gap:18px;background:var(--bg-1);
+    }
+    #brand{display:flex;flex-direction:column;align-items:center;gap:10px}
+    #title{font-size:28px;letter-spacing:4px;text-transform:uppercase;margin:0}
+    #logo{max-height:84px;display:none}
+    #dispWrap{
+      width:min(92%,1200px);aspect-ratio:16/9;background:#090e13;
+      border:1px solid var(--border);border-radius:14px;overflow:hidden;
+      display:flex;align-items:center;justify-content:center;position:relative;
+    }
+    #disp{width:100%;height:100%;object-fit:cover;display:none}
+    #wait{font-size:16px;color:var(--muted);text-align:center}
+    #tap{
+      position:absolute;inset:auto auto 18px 18px;
+      background:rgba(15,20,29,.75);border:1px solid var(--border);
+      color:var(--text);padding:8px 12px;border-radius:8px;display:none;
+      font-size:12px;cursor:pointer;
+    }
+    #side{
+      background:var(--panel);border-left:1px solid var(--border);
+      padding:18px;display:flex;flex-direction:column;gap:12px;
+    }
+    .side-title{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+    #gal{overflow-y:auto;display:grid;gap:10px}
+    .g-item{
+      border:1px solid var(--border);border-radius:10px;overflow:hidden;
+      cursor:pointer;background:#0b1016;
+    }
+    .g-item video{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+    .g-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+  </style>
+</head>
+<body>
+  <div id="main">
+    <div id="brand">
+      <h1 id="title">360 Booth</h1>
+      <img id="logo" alt="Logo">
+    </div>
+    <div id="dispWrap">
+      <video id="disp" muted playsinline></video>
+      <div id="wait">Várakozás...</div>
+      <button id="tap" type="button">Kattints a lejátszáshoz</button>
+    </div>
+  </div>
+  <div id="side">
+    <div class="side-title">Galéria</div>
+    <div id="gal"></div>
+  </div>
+  <script>
+    const disp = document.getElementById('disp');
+    const wait = document.getElementById('wait');
+    const tap = document.getElementById('tap');
+    const gal = document.getElementById('gal');
+
+    function playVideo(url) {
+      disp.src = url;
+      disp.muted = true;
+      disp.playsInline = true;
+      disp.autoplay = true;
+      disp.loop = true;
+      disp.controls = false;
+      disp.style.display = 'block';
+      wait.style.display = 'none';
+      tap.style.display = 'none';
+      const p = disp.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          tap.style.display = 'block';
+        });
+      }
+    }
+
+    tap.addEventListener('click', () => {
+      disp.play().then(() => { tap.style.display = 'none'; }).catch(() => {});
+    });
+
+    function buildThumb(url, imgEl) {
+      const v = document.createElement('video');
+      v.src = url;
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = 'metadata';
+
+      const draw = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = v.videoWidth || 320;
+          c.height = v.videoHeight || 180;
+          const cctx = c.getContext('2d');
+          cctx.drawImage(v, 0, 0, c.width, c.height);
+          imgEl.src = c.toDataURL('image/jpeg', 0.75);
+        } catch (_) {
+          // leave as empty thumbnail if we cannot draw
+        }
+      };
+
+      v.addEventListener('loadedmetadata', () => {
+        const t = Math.min(0.1, v.duration || 0.1);
+        try { v.currentTime = t; } catch (_) { draw(); }
+      }, { once: true });
+
+      v.addEventListener('seeked', () => {
+        draw();
+      }, { once: true });
+    }
+
+    window.addEventListener('message', (e) => {
+      const d = e.data || {};
+      if (d.type === 'updateBrand') {
+        document.getElementById('title').innerText = d.title || '360 Booth';
+        if (d.logo) {
+          document.getElementById('logo').src = d.logo;
+          document.getElementById('logo').style.display = 'block';
+        } else {
+          document.getElementById('logo').style.display = 'none';
+        }
+      }
+      if (d.type === 'newVideo') {
+        playVideo(d.url);
+        const g = document.createElement('div');
+        g.className = 'g-item';
+        const img = document.createElement('img');
+        img.className = 'g-thumb';
+        img.alt = 'Video thumbnail';
+        g.appendChild(img);
+        buildThumb(d.url, img);
+        g.onclick = () => playVideo(d.url);
+        gal.prepend(g);
+      }
+    });
+  <\/script>
+</body>
+</html>`;
             projectorWin = window.open("", "ProjectorWindow", "width=1280,height=720,menubar=no,toolbar=no");
             projectorWin.document.write(displayHTML);
+            projectorWin.document.close();
             setTimeout(() => updateBranding(), 500);
         }
         function sendToProjector(blobUrl) {
@@ -1811,6 +2226,102 @@
             r.readAsDataURL(file);
         }
 
+        function clearOverlay() {
+            overlayReady = false;
+            overlayCrop = null;
+            overlayCroppedOnce = false;
+            try { overlayImg.removeAttribute('src'); } catch (_) { }
+            overlayImg.style.display = 'none';
+            const input = document.getElementById('overlayFile');
+            if (input) input.value = '';
+            statusBadge.innerText = 'OVERLAY OFF';
+            statusBadge.style.color = '#aaa';
+        }
+
+        function isDateOverlayEnabled() {
+            const chk = document.getElementById('dateOverlay');
+            return !!(chk && chk.checked);
+        }
+
+        function getDateOverlayPos() {
+            const sel = document.getElementById('dateOverlayPos');
+            return sel ? sel.value : 'br';
+        }
+
+        function getDateOverlayOffsets() {
+            const ox = document.getElementById('dateOverlayOffsetX');
+            const oy = document.getElementById('dateOverlayOffsetY');
+            const x = ox ? parseInt(ox.value, 10) : 18;
+            const y = oy ? parseInt(oy.value, 10) : 18;
+            return { x: isFinite(x) ? x : 18, y: isFinite(y) ? y : 18 };
+        }
+
+        function updateDateOverlayPreview() {
+            const xVal = document.getElementById('dateOverlayOffsetXVal');
+            const yVal = document.getElementById('dateOverlayOffsetYVal');
+            const off = getDateOverlayOffsets();
+            if (xVal) xVal.textContent = String(off.x);
+            if (yVal) yVal.textContent = String(off.y);
+        }
+
+        function formatDateStamp(d) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}.${m}.${day}`;
+        }
+
+        function drawDateStamp(ctx2, w, h) {
+            const text = formatDateStamp(new Date());
+            const size = Math.max(18, Math.round(w * 0.02));
+            const padX = Math.round(size * 0.6);
+            const padY = Math.round(size * 0.45);
+            ctx2.save();
+            ctx2.font = `600 ${size}px "Space Grotesk", sans-serif`;
+            const metrics = ctx2.measureText(text);
+            const boxW = Math.ceil(metrics.width + padX * 2);
+            const boxH = Math.ceil(size + padY * 2);
+            const pos = getDateOverlayPos();
+            const off = getDateOverlayOffsets();
+            let x = w - boxW - Math.round(size * 0.8);
+            let y = h - boxH - Math.round(size * 0.7);
+            if (pos === 'bl') {
+                x = off.x;
+                y = h - boxH - off.y;
+            } else if (pos === 'tr') {
+                x = w - boxW - off.x;
+                y = off.y;
+            } else if (pos === 'tl') {
+                x = off.x;
+                y = off.y;
+            } else {
+                x = w - boxW - off.x;
+                y = h - boxH - off.y;
+            }
+            const r = Math.max(6, Math.round(size * 0.35));
+            ctx2.fillStyle = 'rgba(10, 15, 20, 0.65)';
+            ctx2.strokeStyle = 'rgba(30, 42, 56, 0.9)';
+            ctx2.lineWidth = 1;
+            ctx2.beginPath();
+            if (typeof ctx2.roundRect === 'function') {
+                ctx2.roundRect(x, y, boxW, boxH, r);
+            } else {
+                const rr = Math.min(r, Math.floor(boxW / 2), Math.floor(boxH / 2));
+                ctx2.moveTo(x + rr, y);
+                ctx2.arcTo(x + boxW, y, x + boxW, y + boxH, rr);
+                ctx2.arcTo(x + boxW, y + boxH, x, y + boxH, rr);
+                ctx2.arcTo(x, y + boxH, x, y, rr);
+                ctx2.arcTo(x, y, x + boxW, y, rr);
+                ctx2.closePath();
+            }
+            ctx2.fill();
+            ctx2.stroke();
+            ctx2.fillStyle = '#e6edf3';
+            ctx2.textBaseline = 'middle';
+            ctx2.fillText(text, x + padX, y + boxH / 2);
+            ctx2.restore();
+        }
+
         // --- 4. RÖGZÍTÉS (WEBCAM MÓD) ---
         function initiateCamSequence() {
             if (!stream) {
@@ -1838,7 +2349,7 @@
             mediaRecorder.onstop = () => {
                 const pick2 = pickRecorderMime();
                 rawVideoBlob = new Blob(chunks, { type: pick2.mime });
-                rawPlayback.src = URL.createObjectURL(rawVideoBlob);
+                setRawPlaybackSource(rawVideoBlob);
                 startProcessingLoop();
             };
             mediaRecorder.start();
@@ -1974,6 +2485,9 @@
                             console.warn('[OVERLAY] drawImage failed:', e);
                         }
                     }
+                    if (isDateOverlayEnabled()) {
+                        drawDateStamp(ctx, canvas.width, canvas.height);
+                    }
 
                     el += 0.033;
                     const p = Math.min((el / tDur) * 100, 100);
@@ -2006,6 +2520,7 @@
             else { canvas.style.display = 'block'; } // Fájl módban maradjon a canvas a legutolsó képpel
 
             // A kimenet doboz maradhat látható a végén, de felvételkor/feldolgozáskor elrejtjük.
+            updateDateOverlayPreview();
         }
 
         // Kamerák betöltése csak user gesture után (pl. módváltás / gombnyomás), különben a böngésző blokkolhatja.
@@ -2024,6 +2539,7 @@
             setTimeout(applyLiveVideoTransform, 0);
             setTimeout(applyLiveVideoTransform, 50);
             syncLastOutputWidth();
+            updateDateOverlayPreview();
         });
         effects.push({ duration: 2, speed: 0.5 });
         renderList();
@@ -2038,10 +2554,30 @@
             renderTimeline();
         })();
 
+        (function initDateOverlayUI() {
+            const chk = document.getElementById('dateOverlay');
+            if (chk) chk.addEventListener('change', updateDateOverlayPreview);
+            updateDateOverlayPreview();
+            setInterval(updateDateOverlayPreview, 60 * 1000);
+        })();
+
         window.addEventListener('beforeunload', () => {
             stopLivePreviewLoop();
             try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch (_) { }
         });
+
+        function updateUiScale() {
+            const baseW = 1024;
+            const baseH = 680;
+            const vw = Math.max(1, window.innerWidth || baseW);
+            const vh = Math.max(1, window.innerHeight || baseH);
+            const scale = Math.min(1, vw / baseW, vh / baseH);
+            document.documentElement.style.setProperty('--ui-scale', scale.toFixed(3));
+        }
+
+        updateUiScale();
+        window.addEventListener('resize', updateUiScale);
+        window.addEventListener('orientationchange', updateUiScale);
     </script>
 </body>
 
