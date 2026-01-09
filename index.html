@@ -183,7 +183,8 @@
             /* alap: fekvő konténer */
             max-height: 70vh;
             background: #000;
-            border: 2px solid #333;
+            border: none;
+            box-shadow: inset 0 0 0 2px #333;
             overflow: hidden;
             border-radius: 8px;
             will-change: transform;
@@ -892,6 +893,13 @@
 
         // Overlay betöltés állapot (stabil rajzolás + debug)
         let overlayReady = false;
+
+        // Overlay PNG átlátszó perem levágás (alpha bbox) – hogy a keret tényleg kifusson a szélekig
+        // { sx, sy, sw, sh } forrás-kivágás a PNG-ből
+        let overlayCrop = null;
+
+        // Prevent infinite onload recursion when we crop the overlay image for preview
+        let overlayCroppedOnce = false;
 
         // Kimenet képarány / overlay illesztés
         let outputAspectMode = 'landscape'; // 'landscape' | 'portrait'
@@ -1645,8 +1653,58 @@
         }
 
         // --- OVERLAY LOADER ---
+
+        function computeAlphaBBoxFromImage(imgEl) {
+            try {
+                const w = imgEl.naturalWidth || 0;
+                const h = imgEl.naturalHeight || 0;
+                if (w <= 0 || h <= 0) return null;
+
+                const tmp = document.createElement('canvas');
+                tmp.width = w;
+                tmp.height = h;
+                const tctx = tmp.getContext('2d', { willReadFrequently: true });
+                tctx.clearRect(0, 0, w, h);
+                tctx.drawImage(imgEl, 0, 0);
+
+                const data = tctx.getImageData(0, 0, w, h).data;
+                let minX = w, minY = h, maxX = -1, maxY = -1;
+
+                // Alpha csatorna: data[i+3]
+                for (let y = 0; y < h; y++) {
+                    const row = y * w * 4;
+                    for (let x = 0; x < w; x++) {
+                        const a = data[row + x * 4 + 3];
+                        if (a > 0) {
+                            if (x < minX) minX = x;
+                            if (y < minY) minY = y;
+                            if (x > maxX) maxX = x;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+
+                if (maxX < minX || maxY < minY) return null;
+
+                // +1 mert maxX/maxY pixel is kell
+                const sx = minX;
+                const sy = minY;
+                const sw = (maxX - minX + 1);
+                const sh = (maxY - minY + 1);
+
+                // Ha gyakorlatilag teljes kép, nem cropolunk
+                if (sx === 0 && sy === 0 && sw === w && sh === h) return null;
+
+                return { sx, sy, sw, sh, w, h };
+            } catch (e) {
+                console.warn('[OVERLAY] bbox compute failed:', e);
+                return null;
+            }
+        }
         function loadOverlay(i) {
             overlayReady = false;
+            overlayCrop = null;
+            overlayCroppedOnce = false;
 
             if (!i || !i.files || !i.files[0]) {
                 try {
@@ -1687,6 +1745,47 @@
 
             overlayImg.onload = () => {
                 overlayReady = true;
+
+                // Alpha bbox crop: levágjuk a teljesen átlátszó peremet, hogy a keret kifusson a szélekig
+                overlayCrop = computeAlphaBBoxFromImage(overlayImg);
+
+                // IMPORTANT: a preview-ben (IMG overlay) is látszódjon a crop.
+                // Ehhez egyszer (csak egyszer!) fizikailag új PNG-t generálunk a levágott tartalomból,
+                // és visszatöltjük az overlayImg-be. Így eltűnik a külső átlátszó perem miatti fekete sáv.
+                if (overlayCrop && !overlayCroppedOnce) {
+                    try {
+                        const tmp = document.createElement('canvas');
+                        tmp.width = overlayCrop.sw;
+                        tmp.height = overlayCrop.sh;
+                        const tctx = tmp.getContext('2d');
+                        tctx.clearRect(0, 0, tmp.width, tmp.height);
+                        tctx.drawImage(
+                            overlayImg,
+                            overlayCrop.sx, overlayCrop.sy, overlayCrop.sw, overlayCrop.sh,
+                            0, 0, overlayCrop.sw, overlayCrop.sh
+                        );
+
+                        // Jelöljük, hogy ez már a "croppolt" verzió, hogy ne legyen végtelen onload ciklus
+                        overlayCroppedOnce = true;
+
+                        // A további rajzoláshoz már nincs szükség forrás-crop adatra a preview-hoz,
+                        // de a canvas renderben még használható lenne. Mivel itt fizikailag levágtuk a képet,
+                        // lenullázzuk, így a renderben sima drawImage is teljesen kifut.
+                        overlayCrop = null;
+
+                        // Új PNG betöltése (újra fog futni az onload egyszer)
+                        overlayImg.src = tmp.toDataURL('image/png');
+                        return;
+                    } catch (e) {
+                        console.warn('[OVERLAY] preview crop build failed:', e);
+                        // ha a crop generálás elhasal, marad a korábbi logika
+                    }
+                }
+
+                if (overlayCrop) {
+                    console.log('[OVERLAY] alpha-crop', overlayCrop);
+                }
+
                 console.log('[OVERLAY] loaded', overlayImg.naturalWidth, overlayImg.naturalHeight);
                 statusBadge.innerText = 'OVERLAY OK';
                 statusBadge.style.color = '#03dac6';
