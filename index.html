@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.13 • S.P.</title>
+    <title>360 selfie • v1.2.14 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -22,6 +22,9 @@
             --control-radius: 8px;
             --control-radius-sm: 6px;
             --control-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+            --control-height: 26px;
+            --control-padding: 3px 8px;
+            --control-font: 11px;
             --text: #e8f0f6;
             --muted: #95a3b3;
             --accent: #20d3c1;
@@ -32,7 +35,7 @@
         }
 
         /* --- DIZÁJN --- */
-        body {
+        html, body {
             margin: 0;
             padding: 0;
             background:
@@ -42,10 +45,15 @@
             color: var(--text);
             font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
             height: 100dvh;
+            width: 100%;
+            min-width: 100%;
             display: flex;
-            overflow: hidden; /* görgetés lezárása */
+            overflow-x: hidden; /* vízszintes úszkálás tiltása */
+            overflow-y: hidden;
             padding-bottom: env(safe-area-inset-bottom);
             overscroll-behavior: none;
+            touch-action: pan-y;
+            flex: 1 1 auto;
         }
 
         .container {
@@ -53,22 +61,23 @@
             width: 100%;
             height: 100dvh;
             min-height: 0;
-            transform-origin: top left;
-            transform: scale(var(--ui-scale));
-            width: calc(100% / var(--ui-scale));
-            height: calc(100dvh / var(--ui-scale));
+            overflow-x: hidden;
+            flex: 1 1 auto;
+            align-self: stretch;
         }
 
         .panel {
-            padding: 16px;
+            padding: 8px;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 5px;
             overflow-y: auto;
+            overflow-x: hidden;
             min-height: 0; /* fontos, hogy mobilon görgethető maradjon */
             -webkit-overflow-scrolling: touch;
             background: var(--panel);
+            min-width: 0;
         }
 
         .left-panel {
@@ -77,7 +86,7 @@
             border-right: 1px solid var(--border);
             z-index: 2;
             box-shadow: 5px 0 18px var(--shadow);
-            padding-bottom: calc(16px + env(safe-area-inset-bottom));
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
         }
 
         .center-panel {
@@ -89,7 +98,7 @@
             display: flex;
             flex-direction: column;
             overflow-y: auto;
-            padding-bottom: 16px;
+            padding-bottom: 10px;
         }
 
         .right-panel {
@@ -99,18 +108,18 @@
         }
 
         .app-header {
-            font-size: 20px;
+            font-size: 17px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 2.5px;
-            margin-bottom: 16px;
+            margin-bottom: 8px;
             text-align: center;
             color: var(--text);
             text-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
         }
 
         h3 {
-            margin: 0 0 5px 0;
+            margin: 0 0 4px 0;
             color: var(--accent);
             border-bottom: 1px solid var(--border);
             padding-bottom: 4px;
@@ -123,18 +132,18 @@
             font-size: 10px;
             color: var(--muted);
             text-transform: uppercase;
-            margin-top: 6px;
+            margin-top: 2px;
             display: block;
             font-weight: 600;
         }
 
-        .control-inline {
+        .field-stack {
             display: flex;
-            align-items: center;
-            gap: 8px;
+            flex-direction: column;
+            gap: 4px;
         }
 
-        .control-inline .control-label {
+        .checkbox-label {
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -143,25 +152,17 @@
             text-transform: uppercase;
             letter-spacing: 0.6px;
             font-size: 10px;
-            white-space: nowrap;
         }
 
-        .control-inline input[type="checkbox"] {
+        .checkbox-label input[type="checkbox"] {
             width: auto;
             min-height: auto;
-        }
-
-        .control-inline input[type="number"] {
-            width: 100%;
-            min-width: 0;
-            padding: 8px 8px;
-            height: 34px;
-            min-height: 34px;
+            margin: 0;
         }
 
         .inline-row {
             display: flex;
-            gap: 8px;
+            gap: 6px;
             align-items: center;
         }
 
@@ -171,7 +172,7 @@
 
         .btn-clear {
             width: auto;
-            padding: 6px 8px;
+            padding: 5px 8px;
             background: transparent;
             border: 1px solid var(--border);
             color: var(--muted);
@@ -183,7 +184,7 @@
         .date-offset-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px;
+            gap: 6px;
         }
 
         .date-offset-item {
@@ -203,25 +204,49 @@
         }
 
         input,
-        select,
-        button {
+        select {
             width: 100%;
-            padding: 8px 10px;
+            padding: var(--control-padding);
             background: var(--control-bg);
             border: 1px solid var(--control-border);
             color: var(--text);
             border-radius: var(--control-radius);
             box-sizing: border-box;
-            margin-bottom: 4px;
-            font-size: 12px;
+            margin-bottom: 3px;
+            font-size: var(--control-font);
             font-family: inherit;
-            min-height: 34px;
+            min-height: var(--control-height);
+            height: var(--control-height);
+            box-shadow: var(--control-shadow);
+            transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+        }
+
+        button {
+            width: 100%;
+            padding: var(--control-padding);
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            color: var(--text);
+            border-radius: var(--control-radius);
+            box-sizing: border-box;
+            margin-bottom: 3px;
+            font-size: var(--control-font);
+            font-family: inherit;
+            min-height: var(--control-height);
             box-shadow: var(--control-shadow);
             transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
         }
 
         input[type="number"] {
-            line-height: 1.1;
+            line-height: 1;
+            appearance: textfield;
+            -moz-appearance: textfield;
+        }
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
 
         input:focus,
@@ -290,10 +315,10 @@
         /* MÓDVÁLTÓ */
         .mode-switch {
             display: flex;
-            gap: 10px;
-            margin-bottom: 8px;
+            gap: 6px;
+            margin-bottom: 6px;
             background: #121926;
-            padding: 4px;
+            padding: 3px;
             border-radius: var(--control-radius);
             border: 1px solid var(--control-border);
         }
@@ -304,7 +329,7 @@
             background: transparent;
             color: var(--muted);
             cursor: pointer;
-            padding: 8px;
+            padding: 6px;
             font-weight: 700;
         }
 
@@ -418,10 +443,10 @@
         .btn-start {
             background: linear-gradient(135deg, var(--accent), #149e86);
             color: #fff;
-            height: 48px;
-            font-size: 15px;
+            height: 44px;
+            font-size: 14px;
             border: none;
-            margin-top: 12px;
+            margin-top: 10px;
             font-weight: bold;
             cursor: pointer;
             border-radius: var(--control-radius);
@@ -620,6 +645,37 @@
             font-weight: 600;
         }
 
+        .fold {
+            border: 1px solid var(--border);
+            background: #0f141d;
+            border-radius: 8px;
+            padding: 6px 8px;
+        }
+
+        .fold summary {
+            list-style: none;
+            cursor: pointer;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 700;
+            letter-spacing: 0.7px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .fold summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .fold .fold-body {
+            margin-top: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
         .ramp-presets {
             display: flex;
             gap: 6px;
@@ -704,7 +760,8 @@
             }
 
             body {
-                overflow: auto;
+                overflow-y: auto;
+                overflow-x: hidden;
             }
 
             .container {
@@ -786,7 +843,8 @@
         /* iPad / tablet fekvő: 2 oszlopos grid, előnézet bal fent, branding alatta, vezérlők jobbra */
         @media (max-width: 1366px) and (orientation: landscape) {
             body {
-                overflow: auto;
+                overflow-y: auto;
+                overflow-x: hidden;
             }
 
             .container {
@@ -888,7 +946,8 @@
             }
 
             body {
-                overflow: auto;
+                overflow-y: auto;
+                overflow-x: hidden;
             }
 
             .container {
@@ -1283,111 +1342,121 @@
                     <option value="contain">Teljes kép (contain)</option>
                 </select>
 
-                <label>Forrás forgatás</label>
-                <select id="sourceRotate" onchange="applySourceRotateFromUI()">
-                    <option value="0" selected>0° (nincs)</option>
-                    <option value="90">90° (álló – balra)</option>
-                    <option value="270">270° (álló – jobbra)</option>
-                </select>
-
-                <label>Forrás vágás (%)</label>
-                <div class="date-offset-row">
-                    <div class="date-offset-item">
-                        <div class="date-offset-head">
-                            <span>Felül</span>
-                            <span id="sourceCropTopVal">0</span>
-                        </div>
-                        <input type="range" id="sourceCropTop" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
-                    </div>
-                    <div class="date-offset-item">
-                        <div class="date-offset-head">
-                            <span>Alul</span>
-                            <span id="sourceCropBottomVal">0</span>
-                        </div>
-                        <input type="range" id="sourceCropBottom" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
-                    </div>
-                </div>
-                <div class="date-offset-row">
-                    <div class="date-offset-item">
-                        <div class="date-offset-head">
-                            <span>Bal</span>
-                            <span id="sourceCropLeftVal">0</span>
-                        </div>
-                        <input type="range" id="sourceCropLeft" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
-                    </div>
-                    <div class="date-offset-item">
-                        <div class="date-offset-head">
-                            <span>Jobb</span>
-                            <span id="sourceCropRightVal">0</span>
-                        </div>
-                        <input type="range" id="sourceCropRight" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
-                    </div>
-                </div>
-
                 <label>Start késleltetés (mp)</label>
                 <input type="number" id="recordDelay" value="0" min="0" max="30" step="1" oninput="applyStartDelayFromUI()">
 
-                <label class="control-inline">
-                    <span class="control-label">
+                <div class="field-stack">
+                    <label class="checkbox-label">
                         <input type="checkbox" id="autoStopEnabled" onchange="applyAutoStopFromUI()" checked>
                         Auto stop (mp)
-                    </span>
+                    </label>
                     <input type="number" id="autoStopSec" value="10" min="5" max="120" step="1" oninput="applyAutoStopFromUI()">
-                </label>
+                </div>
 
-                <label>Kamera felbontás</label>
-                <select id="cameraResolution" onchange="applyCameraResolutionFromUI()">
-                    <option value="1280x720">1280×720 (HD)</option>
-                    <option value="1920x1080" selected>1920×1080 (Full HD)</option>
-                    <option value="2560x1440">2560×1440 (QHD)</option>
-                    <option value="3840x2160">3840×2160 (4K)</option>
-                </select>
+                <details class="fold" id="advancedCameraSettings">
+                    <summary>Speciális beállítások</summary>
+                    <div class="fold-body">
+                        <label>Forrás forgatás</label>
+                        <select id="sourceRotate" onchange="applySourceRotateFromUI()">
+                            <option value="0" selected>0° (nincs)</option>
+                            <option value="90">90° (álló – balra)</option>
+                            <option value="270">270° (álló – jobbra)</option>
+                        </select>
 
-                <label>Kamera FPS</label>
-                <select id="cameraFps" onchange="applyCameraFpsFromUI()">
-                    <option value="24">24 fps</option>
-                    <option value="30">30 fps</option>
-                    <option value="60" selected>60 fps</option>
-                </select>
+                        <label>Forrás vágás (%)</label>
+                        <div class="date-offset-row">
+                            <div class="date-offset-item">
+                                <div class="date-offset-head">
+                                    <span>Felül</span>
+                                    <span id="sourceCropTopVal">0</span>
+                                </div>
+                                <input type="range" id="sourceCropTop" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                            </div>
+                            <div class="date-offset-item">
+                                <div class="date-offset-head">
+                                    <span>Alul</span>
+                                    <span id="sourceCropBottomVal">0</span>
+                                </div>
+                                <input type="range" id="sourceCropBottom" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                            </div>
+                        </div>
+                        <div class="date-offset-row">
+                            <div class="date-offset-item">
+                                <div class="date-offset-head">
+                                    <span>Bal</span>
+                                    <span id="sourceCropLeftVal">0</span>
+                                </div>
+                                <input type="range" id="sourceCropLeft" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                            </div>
+                            <div class="date-offset-item">
+                                <div class="date-offset-head">
+                                    <span>Jobb</span>
+                                    <span id="sourceCropRightVal">0</span>
+                                </div>
+                                <input type="range" id="sourceCropRight" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                            </div>
+                        </div>
 
-                <label>Előnézet FPS</label>
-                <select id="previewFps" onchange="applyPreviewFpsFromUI()">
-                    <option value="20">20 fps</option>
-                    <option value="24">24 fps</option>
-                    <option value="30" selected>30 fps</option>
-                </select>
+                        <label>Kamera felbontás</label>
+                        <select id="cameraResolution" onchange="applyCameraResolutionFromUI()">
+                            <option value="1280x720">1280×720 (HD)</option>
+                            <option value="1920x1080" selected>1920×1080 (Full HD)</option>
+                            <option value="2560x1440">2560×1440 (QHD)</option>
+                            <option value="3840x2160">3840×2160 (4K)</option>
+                        </select>
 
-                <label>Minőség</label>
-                <select id="qualityPreset" onchange="applyQualityFromUI()">
-                    <option value="low">Alacsony (2.5 Mbps • 24 fps)</option>
-                    <option value="med">Közepes (5 Mbps • 30 fps)</option>
-                    <option value="high" selected>Magas (8 Mbps • 30 fps)</option>
-                </select>
+                        <label>Kamera FPS</label>
+                        <select id="cameraFps" onchange="applyCameraFpsFromUI()">
+                            <option value="24">24 fps</option>
+                            <option value="30">30 fps</option>
+                            <option value="60" selected>60 fps</option>
+                        </select>
 
-                <label style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="useSourceResolution" style="width:auto;" onchange="applyUseSourceResolutionFromUI()" checked>
-                    Eredeti felbontás (max)
-                </label>
+                        <label>Előnézet FPS</label>
+                        <select id="previewFps" onchange="applyPreviewFpsFromUI()">
+                            <option value="20">20 fps</option>
+                            <option value="24">24 fps</option>
+                            <option value="30" selected>30 fps</option>
+                        </select>
 
-                <label>Preferált formátum</label>
-                <select id="formatPref" onchange="applyFormatFromUI()">
-                    <option value="auto" selected>Auto (böngésző dönt)</option>
-                    <option value="mp4">MP4 (ha támogatott)</option>
-                    <option value="webm">WebM</option>
-                </select>
+                        <label>Minőség</label>
+                        <select id="qualityPreset" onchange="applyQualityFromUI()">
+                            <option value="low">Alacsony (2.5 Mbps • 24 fps)</option>
+                            <option value="med">Közepes (5 Mbps • 30 fps)</option>
+                            <option value="high" selected>Magas (8 Mbps • 30 fps)</option>
+                        </select>
+
+                        <label style="display:flex; align-items:center; gap:8px;">
+                            <input type="checkbox" id="useSourceResolution" style="width:auto;" onchange="applyUseSourceResolutionFromUI()" checked>
+                            Eredeti felbontás (max)
+                        </label>
+
+                        <label>Preferált formátum</label>
+                        <select id="formatPref" onchange="applyFormatFromUI()">
+                            <option value="auto" selected>Auto (böngésző dönt)</option>
+                            <option value="mp4">MP4 (ha támogatott)</option>
+                            <option value="webm">WebM</option>
+                        </select>
+                    </div>
+                </details>
 
                 <div class="signal-info">
                     <div class="signal-head">Bejövő jel</div>
-                    <label>Info mód</label>
-                    <select id="signalSource" onchange="applySignalSourceFromUI()">
-                        <option value="auto" selected>Automatikus</option>
-                        <option value="live">Kamera / élő</option>
-                        <option value="file">Fájl / lejátszás</option>
-                    </select>
                     <div class="signal-row"><span>Forrás</span><span id="signalSourceLabel">-</span></div>
                     <div class="signal-row"><span>Felbontás</span><span id="signalRes">-</span></div>
                     <div class="signal-row"><span>FPS (mért)</span><span id="signalFps">-</span></div>
-                    <div class="signal-row"><span>FPS (beállítás)</span><span id="signalFpsTarget">-</span></div>
+                    <details class="fold">
+                        <summary>Részletek</summary>
+                        <div class="fold-body">
+                            <label>Info mód</label>
+                            <select id="signalSource" onchange="applySignalSourceFromUI()">
+                                <option value="auto" selected>Automatikus</option>
+                                <option value="live">Kamera / élő</option>
+                                <option value="file">Fájl / lejátszás</option>
+                            </select>
+                            <div class="signal-row"><span>FPS (beállítás)</span><span id="signalFpsTarget">-</span></div>
+                        </div>
+                    </details>
                 </div>
 
                 <button id="startBtn" class="btn-start" onclick="initiateCamSequence()">FELVÉTEL START</button>
@@ -3632,12 +3701,7 @@
         });
 
         function updateUiScale() {
-            const baseW = 1024;
-            const baseH = 680;
-            const vw = Math.max(1, window.innerWidth || baseW);
-            const vh = Math.max(1, window.innerHeight || baseH);
-            const scale = Math.min(1, vw / baseW, vh / baseH);
-            document.documentElement.style.setProperty('--ui-scale', scale.toFixed(3));
+            document.documentElement.style.setProperty('--ui-scale', '1');
         }
 
         updateUiScale();
