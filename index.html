@@ -1587,6 +1587,7 @@
         let cameraWidth = 1280;
         let cameraHeight = 720;
         let useSourceResolution = true;
+        const previewMaxEdge = 1280;
         let autoMaxCameraApplied = false;
         let sourceCropPct = { top: 0, right: 0, bottom: 0, left: 0 };
         let isRecording = false;
@@ -2070,6 +2071,9 @@
             applyPreviewAspect();
             syncPreviewCanvasToMode(liveVideo);
             syncLastOutputWidth();
+            if (currentMode === 'cam' && stream) {
+                startCamera();
+            }
         }
 
         function applySignalSourceFromUI() {
@@ -2115,6 +2119,18 @@
 
             // Egyébként natív méret
             return { w: sw, h: sh };
+        }
+
+        function getPreviewCanvasSize(sourceW, sourceH) {
+            const base = chooseCanvasSizeByMode(sourceW, sourceH);
+            if (useSourceResolution) return base;
+
+            const maxEdge = Math.max(1, previewMaxEdge);
+            const scale = Math.min(1, maxEdge / Math.max(base.w, base.h));
+            return {
+                w: Math.max(1, Math.round(base.w * scale)),
+                h: Math.max(1, Math.round(base.h * scale))
+            };
         }
 
         function drawVideoCoverToRect(ctx2, videoEl, dx, dy, dw, dh) {
@@ -2316,7 +2332,7 @@
             const v = videoEl || liveVideo;
             const vw = (v && v.videoWidth) ? v.videoWidth : 1280;
             const vh = (v && v.videoHeight) ? v.videoHeight : 720;
-            const chosen = chooseCanvasSizeByMode(vw, vh);
+            const chosen = getPreviewCanvasSize(vw, vh);
             if (canvas.width !== chosen.w || canvas.height !== chosen.h) {
                 canvas.width = chosen.w;
                 canvas.height = chosen.h;
@@ -2767,12 +2783,16 @@
             stream = null;
 
             try {
-                // NATÍV kamera beállítások: kérjük a MAX felbontást és FPS-t
+                // Kamera beállítások: natív max, vagy UI szerinti cél
+                const useNative = !!useSourceResolution;
+                const targetWidth = cameraWidth || 1280;
+                const targetHeight = cameraHeight || 720;
+                const targetFps = cameraFps || 30;
                 const constraints = {
                     video: {
-                        width: { ideal: 4096 },   // Max szélesség kérése
-                        height: { ideal: 4096 },  // Max magasság kérése
-                        frameRate: { ideal: 60 }, // Max FPS kérése
+                        width: useNative ? { ideal: 4096 } : { ideal: targetWidth },
+                        height: useNative ? { ideal: 4096 } : { ideal: targetHeight },
+                        frameRate: useNative ? { ideal: 60 } : { ideal: targetFps },
                         ...(id ? { deviceId: { exact: id } } : {})
                     },
                     audio: false
@@ -2806,15 +2826,19 @@
                 const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
                 const settings = track && track.getSettings ? track.getSettings() : null;
                 if (settings) {
-                    // Detektáljuk és mentjük el a kamera NATÍV beállításait
+                    // Natív beállítások csak akkor írják felül a UI-t, ha az opció aktív
                     if (settings.width && settings.height) {
-                        cameraWidth = settings.width;
-                        cameraHeight = settings.height;
-                        setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (natív)`);
+                        if (useNative) {
+                            cameraWidth = settings.width;
+                            cameraHeight = settings.height;
+                            setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (natív)`);
+                        }
                     }
                     if (settings.frameRate) {
-                        cameraFps = Math.round(settings.frameRate);
-                        setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (natív)`);
+                        if (useNative) {
+                            cameraFps = Math.round(settings.frameRate);
+                            setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (natív)`);
+                        }
                     }
                 }
 
