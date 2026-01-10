@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.14 • S.P.</title>
+    <title>360 selfie • v1.2.16 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -373,7 +373,7 @@
             height: auto;
             aspect-ratio: 16 / 9;
             /* alap: fekvő konténer */
-            max-height: 70vh;
+            max-height: 55vh;
             background: #0a0f14;
             border: none;
             box-shadow: inset 0 0 0 2px var(--border);
@@ -983,7 +983,7 @@
             }
 
             #videoContainer {
-                max-height: 45vh;
+                max-height: 32vh;
             }
 
             #effectsList.scroll-area {
@@ -1089,7 +1089,7 @@
             }
 
             #videoContainer {
-                max-height: 45vh;
+                max-height: 30vh;
                 border-radius: 10px;
             }
 
@@ -1212,6 +1212,18 @@
 
             body[data-aspect="portrait"] #lastOutput video {
                 max-height: 24vh;
+            }
+        }
+
+        /* Álló módban a videoContainer sokkal kisebb helyet foglaljon */
+        body[data-aspect="portrait"] #videoContainer {
+            max-height: 30vh;
+        }
+
+        /* iPad és kisebb készülékeken álló módban még kompaktabb */
+        @media (max-width: 1024px) and (orientation: portrait) {
+            body[data-aspect="portrait"] #videoContainer {
+                max-height: 28vh;
             }
         }
 
