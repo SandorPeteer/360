@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.3.2 • S.P.</title>
+    <title>360 selfie • v1.3.3 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -1611,22 +1611,32 @@
 
             if (portrait) {
                 // Álló kimenet (9:16)
-                if (viewportWidth <= 700) return 35;
-                if (viewportWidth <= 1024) return 40;
-                return (viewportHeight <= 760) ? 50 : 60;
+                if (isViewportPortrait) {
+                    // Viewport IS álló, kimenet IS álló - tökéletes egyezés
+                    if (viewportWidth <= 500) return 55;  // Kis mobil
+                    if (viewportWidth <= 700) return 60;  // Nagyobb mobil
+                    if (viewportWidth <= 1024) return 65; // Tablet
+                    return 70;
+                } else {
+                    // Viewport fekvő, DE kimenet álló - ritkább eset
+                    if (viewportWidth <= 900) return 40;
+                    return 45;
+                }
             } else {
                 // Fekvő kimenet (16:9)
-                // Ha a viewport is fekvő, normál értékek
                 if (!isViewportPortrait) {
-                    if (viewportWidth <= 900) return 48;
+                    // Viewport IS fekvő, kimenet IS fekvő - tökéletes egyezés
+                    if (viewportWidth <= 700) return 55;  // Kis mobil fekvő
+                    if (viewportWidth <= 900) return 60;  // Nagyobb mobil fekvő
+                    if (viewportWidth <= 1024) return 65; // Tablet fekvő
+                    return 70;
+                } else {
+                    // Viewport álló, DE kimenet fekvő - széles sáv kell
+                    if (viewportWidth <= 500) return 35;  // Kis mobil
+                    if (viewportWidth <= 700) return 40;  // Nagyobb mobil
+                    if (viewportWidth <= 1024) return 45; // Tablet/iPad
                     return 55;
                 }
-
-                // Ha viewport álló, DE kimenet fekvő → NE korlátozzuk túl kicsire!
-                // iPad álló nézetben fekvő videóhoz elegendő hely kell
-                if (viewportWidth <= 700) return 35;  // Mobil: kisebb
-                if (viewportWidth <= 1024) return 45; // iPad: nagyobb (volt 30!)
-                return 55;
             }
         }
 
@@ -1634,42 +1644,31 @@
             const vc = document.getElementById('videoContainer');
             if (!vc) return;
 
-            // Előnézet keret: alapból 16:9 fekvő.
-            // Álló módban nem 9:16-re rajzoljuk át (ebből lesz a „négyzetes" összeomlás),
-            // hanem a 16:9 keretet forgatjuk 270°-kal és méretezzük, hogy stabilan beférjen.
-
             const portrait = (outputAspectMode === 'portrait');
-
-            // Detektáljuk a viewport orientációját és méretét
             const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
             const viewportWidth = window.innerWidth || 0;
             const viewportHeight = window.innerHeight || 0;
 
             vc.style.transformOrigin = '50% 50%';
+            vc.style.transform = 'none';
 
             if (portrait) {
-                // Álló előnézet keret: ténylegesen 9:16, NEM forgatjuk a konténert.
-                // Így a doboz nem fog "kilógni" a középső panelből.
+                // Álló kimenet (9:16)
                 const maxVh = getMaxVhForMode(true, viewportWidth, viewportHeight);
 
-                vc.style.transform = 'none';
                 vc.style.aspectRatio = '9 / 16';
-
-                // Stabil illesztés: kisebb max magasság álló módban, hogy maradjon hely a kontrolloknak.
-                // (Ha a panel szűk, a maxWidth=100% fogja meg.)
+                vc.style.width = 'auto';
                 vc.style.height = `${maxVh}dvh`;
                 vc.style.maxHeight = `${maxVh}dvh`;
-                vc.style.width = `calc(${maxVh}dvh * 9 / 16)`;
                 vc.style.maxWidth = '100%';
             } else {
-                // Fekvő kimenet
+                // Fekvő kimenet (16:9)
                 const maxVh = getMaxVhForMode(false, viewportWidth, viewportHeight);
 
                 vc.style.aspectRatio = '16 / 9';
                 vc.style.width = '100%';
                 vc.style.height = 'auto';
                 vc.style.maxHeight = `${maxVh}dvh`;
-                vc.style.transform = 'none';
                 vc.style.maxWidth = '100%';
             }
             syncLastOutputWidth();
@@ -1955,26 +1954,33 @@
         }
 
         function chooseCanvasSizeByMode(sourceW, sourceH) {
-            // Az álló/fekvő itt már TÉNYLEG a kimenet méretét állítja.
-            // Ha az "Eredeti felbontás" aktív, akkor a forrás méretéhez igazodunk.
+            // MINDIG használjuk a forrás felbontását a legjobb minőséghez
             const mode = outputAspectMode;
             const sw = sourceW || 1280;
             const sh = sourceH || 720;
 
-            if (useSourceResolution) {
-                if (mode === 'portrait' && sw > sh) {
-                    return { w: sh, h: sw };
-                }
-                return { w: sw, h: sh };
-            }
+            // Határozzuk meg a forrás képarányát
+            const sourceAspect = sw / sh;
 
             if (mode === 'portrait') {
-                // Álló kimenet (720x1280)
-                return { w: 720, h: 1280 };
+                // Álló kimenet (9:16)
+                if (sourceAspect > 1) {
+                    // Fekvő forrás → álló kimenet: swap
+                    return { w: Math.min(sw, sh), h: Math.max(sw, sh) };
+                } else {
+                    // Már álló forrás
+                    return { w: sw, h: sh };
+                }
+            } else {
+                // Fekvő kimenet (16:9)
+                if (sourceAspect < 1) {
+                    // Álló forrás → fekvő kimenet: swap
+                    return { w: Math.max(sw, sh), h: Math.min(sw, sh) };
+                } else {
+                    // Már fekvő forrás
+                    return { w: sw, h: sh };
+                }
             }
-
-            // Fekvő kimenet (1280x720)
-            return { w: 1280, h: 720 };
         }
 
         function drawVideoCoverToRect(ctx2, videoEl, dx, dy, dw, dh) {
