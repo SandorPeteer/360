@@ -9,16 +9,23 @@
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
         :root {
-            --bg-0: #0a0f14;
-            --bg-1: #0f151d;
-            --bg-2: #141c26;
-            --panel: #10161f;
-            --panel-2: #0c121a;
-            --border: #222c3a;
-            --text: #e6edf3;
-            --muted: #9aa4b2;
-            --accent: #23d7b5;
-            --accent-2: #5eead4;
+            --bg-0: #0a1016;
+            --bg-1: #0e1620;
+            --bg-2: #111b27;
+            --panel: #0f1822;
+            --panel-2: #0b141e;
+            --border: #1e2a3a;
+            --control-bg: #121c27;
+            --control-bg-hover: #162131;
+            --control-border: #253244;
+            --control-border-strong: #2b3a50;
+            --control-radius: 8px;
+            --control-radius-sm: 6px;
+            --control-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+            --text: #e8f0f6;
+            --muted: #95a3b3;
+            --accent: #20d3c1;
+            --accent-2: #51f3db;
             --danger: #ff5c7c;
             --shadow: rgba(0, 0, 0, 0.45);
             --ui-scale: 1;
@@ -53,11 +60,11 @@
         }
 
         .panel {
-            padding: 20px;
+            padding: 16px;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
             overflow-y: auto;
             min-height: 0; /* fontos, hogy mobilon görgethető maradjon */
             -webkit-overflow-scrolling: touch;
@@ -70,7 +77,7 @@
             border-right: 1px solid var(--border);
             z-index: 2;
             box-shadow: 5px 0 18px var(--shadow);
-            padding-bottom: calc(20px + env(safe-area-inset-bottom));
+            padding-bottom: calc(16px + env(safe-area-inset-bottom));
         }
 
         .center-panel {
@@ -82,7 +89,7 @@
             display: flex;
             flex-direction: column;
             overflow-y: auto;
-            padding-bottom: 20px;
+            padding-bottom: 16px;
         }
 
         .right-panel {
@@ -92,11 +99,11 @@
         }
 
         .app-header {
-            font-size: 24px;
+            font-size: 20px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 2.5px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             text-align: center;
             color: var(--text);
             text-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
@@ -106,19 +113,50 @@
             margin: 0 0 5px 0;
             color: var(--accent);
             border-bottom: 1px solid var(--border);
-            padding-bottom: 5px;
+            padding-bottom: 4px;
             text-transform: uppercase;
-            font-size: 12px;
+            font-size: 11px;
             letter-spacing: 1px;
         }
 
         label {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--muted);
             text-transform: uppercase;
-            margin-top: 8px;
+            margin-top: 6px;
             display: block;
             font-weight: 600;
+        }
+
+        .control-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-inline .control-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+
+        .control-inline input[type="checkbox"] {
+            width: auto;
+            min-height: auto;
+        }
+
+        .control-inline input[type="number"] {
+            width: 100%;
+            min-width: 0;
+            padding: 8px 8px;
+            height: 34px;
+            min-height: 34px;
         }
 
         .inline-row {
@@ -133,11 +171,11 @@
 
         .btn-clear {
             width: auto;
-            padding: 8px 10px;
+            padding: 6px 8px;
             background: transparent;
             border: 1px solid var(--border);
             color: var(--muted);
-            border-radius: 8px;
+            border-radius: var(--control-radius-sm);
             cursor: pointer;
             font-weight: 700;
         }
@@ -145,7 +183,7 @@
         .date-offset-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 8px;
         }
 
         .date-offset-item {
@@ -158,7 +196,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 10px;
+            font-size: 9px;
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.6px;
@@ -168,16 +206,22 @@
         select,
         button {
             width: 100%;
-            padding: 10px;
-            background: #151d28;
-            border: 1px solid var(--border);
+            padding: 8px 10px;
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
             color: var(--text);
-            border-radius: 8px;
+            border-radius: var(--control-radius);
             box-sizing: border-box;
             margin-bottom: 4px;
-            font-size: 13px;
+            font-size: 12px;
             font-family: inherit;
-            transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
+            min-height: 34px;
+            box-shadow: var(--control-shadow);
+            transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+        }
+
+        input[type="number"] {
+            line-height: 1.1;
         }
 
         input:focus,
@@ -185,6 +229,11 @@
         button:focus {
             outline: none;
             border-color: rgba(35, 215, 181, 0.6);
+            box-shadow: 0 0 0 2px rgba(35, 215, 181, 0.12);
+        }
+
+        button:hover {
+            background: var(--control-bg-hover);
         }
 
         button:active {
@@ -199,17 +248,54 @@
             background: transparent;
             border: none;
             box-sizing: border-box;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            background: #0f1722;
+            border-radius: 999px;
+            border: 1px solid var(--control-border);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid #0b121a;
+            margin-top: -6px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+        }
+
+        input[type="range"]::-moz-range-track {
+            height: 6px;
+            background: #0f1722;
+            border-radius: 999px;
+            border: 1px solid var(--control-border);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid #0b121a;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
         }
 
         /* MÓDVÁLTÓ */
         .mode-switch {
             display: flex;
             gap: 10px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             background: #121926;
-            padding: 5px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
+            padding: 4px;
+            border-radius: var(--control-radius);
+            border: 1px solid var(--control-border);
         }
 
         .mode-btn {
@@ -225,7 +311,7 @@
         .mode-btn.active {
             background: linear-gradient(135deg, var(--accent), #18b79a);
             color: #051418;
-            border-radius: 6px;
+            border-radius: var(--control-radius-sm);
         }
 
         /* HÚZD IDE */
@@ -332,19 +418,23 @@
         .btn-start {
             background: linear-gradient(135deg, var(--accent), #149e86);
             color: #fff;
-            height: 60px;
-            font-size: 18px;
+            height: 48px;
+            font-size: 15px;
             border: none;
-            margin-top: 15px;
+            margin-top: 12px;
             font-weight: bold;
             cursor: pointer;
-            border-radius: 10px;
+            border-radius: var(--control-radius);
+        }
+
+        .btn-start:hover {
+            background: linear-gradient(135deg, #ff5c7c, #ff2d55);
         }
 
         .btn-projector {
-            background: #152033;
+            background: var(--control-bg);
             color: #fff;
-            border: 1px solid var(--border);
+            border: 1px solid var(--control-border);
             cursor: pointer;
             font-weight: 700;
         }
@@ -353,10 +443,10 @@
             max-height: 150px;
             overflow-y: auto;
             overflow-x: hidden;
-            border: 1px solid var(--border);
+            border: 1px solid var(--control-border);
             background: #0c121a;
-            padding: 5px;
-            border-radius: 8px;
+            padding: 4px;
+            border-radius: var(--control-radius);
         }
 
         #effectsList.scroll-area {
@@ -367,8 +457,8 @@
         }
 
         .effect-item {
-            font-size: 12px;
-            padding: 6px 8px;
+            font-size: 11px;
+            padding: 5px 6px;
             border-bottom: 1px solid #1b2430;
             display: flex;
             justify-content: space-between;
@@ -380,7 +470,7 @@
         .eff-compact {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             width: 100%;
         }
 
@@ -399,7 +489,7 @@
         }
 
         .eff-label {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--muted);
             text-transform: uppercase;
             font-weight: 700;
@@ -410,7 +500,7 @@
         }
 
         .eff-value {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--accent);
             font-weight: 800;
             white-space: nowrap;
@@ -467,14 +557,14 @@
 
         .eff-preset button {
             width: auto;
-            padding: 6px 8px;
-            background: #151d28;
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            padding: 5px 8px;
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: var(--control-radius-sm);
             cursor: pointer;
             font-weight: 800;
             color: var(--text);
-            font-size: 12px;
+            font-size: 10.5px;
             line-height: 1;
         }
 
@@ -493,10 +583,11 @@
 
         .eff-actions button {
             width: auto;
-            padding: 8px 10px;
-            font-size: 12px;
+            padding: 6px 10px;
+            font-size: 10.5px;
             margin: 0;
             white-space: nowrap;
+            border-radius: var(--control-radius-sm);
         }
 
         .signal-info {
@@ -533,16 +624,16 @@
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
-            margin-top: 6px;
+            margin-top: 4px;
         }
 
         .ramp-presets button {
             width: auto;
-            padding: 6px 8px;
-            font-size: 11px;
-            border-radius: 6px;
-            background: #151d28;
-            border: 1px solid var(--border);
+            padding: 5px 8px;
+            font-size: 10.5px;
+            border-radius: var(--control-radius-sm);
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
             color: var(--text);
             font-weight: 700;
             cursor: pointer;
@@ -929,13 +1020,13 @@
             input,
             select,
             button {
-                padding: 8px;
-                font-size: 12px;
+                padding: 7px 9px;
+                font-size: 11.5px;
             }
 
             .btn-start {
-                height: 50px;
-                font-size: 16px;
+                height: 46px;
+                font-size: 15px;
             }
 
             #videoContainer {
@@ -1236,8 +1327,11 @@
                 <label>Start késleltetés (mp)</label>
                 <input type="number" id="recordDelay" value="0" min="0" max="30" step="1" oninput="applyStartDelayFromUI()">
 
-                <label style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="autoStopEnabled" style="width:auto;" onchange="applyAutoStopFromUI()" checked> Auto stop (mp)
+                <label class="control-inline">
+                    <span class="control-label">
+                        <input type="checkbox" id="autoStopEnabled" onchange="applyAutoStopFromUI()" checked>
+                        Auto stop (mp)
+                    </span>
                     <input type="number" id="autoStopSec" value="10" min="5" max="120" step="1" oninput="applyAutoStopFromUI()">
                 </label>
 
