@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.16 • S.P.</title>
+    <title>360 selfie • v1.2.18 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -1220,12 +1220,7 @@
             max-height: 30vh;
         }
 
-        /* iPad és kisebb készülékeken álló módban még kompaktabb */
-        @media (max-width: 1024px) and (orientation: portrait) {
-            body[data-aspect="portrait"] #videoContainer {
-                max-height: 28vh;
-            }
-        }
+        /* iPad és kisebb készülékeken álló módban még kompaktabb - NEM használjuk, mert a JS állítja */
 
     </style>
 </head>
@@ -1629,18 +1624,32 @@
             if (!vc) return;
 
             // Előnézet keret: alapból 16:9 fekvő.
-            // Álló módban nem 9:16-re rajzoljuk át (ebből lesz a „négyzetes” összeomlás),
+            // Álló módban nem 9:16-re rajzoljuk át (ebből lesz a „négyzetes" összeomlás),
             // hanem a 16:9 keretet forgatjuk 270°-kal és méretezzük, hogy stabilan beférjen.
 
             const portrait = (outputAspectMode === 'portrait');
+
+            // Detektáljuk a viewport orientációját és méretét
+            const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
+            const viewportWidth = window.innerWidth || 0;
+            const viewportHeight = window.innerHeight || 0;
 
             vc.style.transformOrigin = '50% 50%';
 
             if (portrait) {
                 // Álló előnézet keret: ténylegesen 9:16, NEM forgatjuk a konténert.
                 // Így a doboz nem fog "kilógni" a középső panelből.
-                const h = window.innerHeight || 0;
-                const maxVh = (h && h <= 760) ? 50 : 60;
+                const h = viewportHeight;
+                let maxVh = (h && h <= 760) ? 50 : 60;
+
+                // iPad/mobil álló nézetben még kisebb
+                if (isViewportPortrait && viewportWidth <= 1024) {
+                    maxVh = Math.min(maxVh, 40);
+                }
+                if (isViewportPortrait && viewportWidth <= 700) {
+                    maxVh = Math.min(maxVh, 35);
+                }
+
                 vc.style.transform = 'none';
                 vc.style.aspectRatio = '9 / 16';
 
@@ -1651,10 +1660,21 @@
                 vc.style.width = `calc(${maxVh}vh * 9 / 16)`;
                 vc.style.maxWidth = '100%';
             } else {
+                // Fekvő kimenet
                 vc.style.aspectRatio = '16 / 9';
                 vc.style.width = '100%';
                 vc.style.height = 'auto';
-                vc.style.maxHeight = '70vh';
+
+                let maxVh = 70;
+                // iPad/mobil álló viewport esetén kisebb fekvő preview
+                if (isViewportPortrait && viewportWidth <= 1024) {
+                    maxVh = 30;
+                }
+                if (isViewportPortrait && viewportWidth <= 700) {
+                    maxVh = 28;
+                }
+
+                vc.style.maxHeight = `${maxVh}vh`;
                 vc.style.transform = 'none';
                 vc.style.maxWidth = '100%';
             }
