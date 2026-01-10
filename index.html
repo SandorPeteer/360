@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.5.1 • S.P.</title>
+    <title>360 selfie • v1.6.2 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -22,8 +22,8 @@
             --control-radius: 8px;
             --control-radius-sm: 6px;
             --control-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-            --control-height: 26px;
-            --control-padding: 3px 8px;
+            --control-height: 30px;
+            --control-padding: 6px 8px;
             --control-font: 11px;
             --text: #e8f0f6;
             --muted: #95a3b3;
@@ -203,7 +203,7 @@
             letter-spacing: 0.6px;
         }
 
-        input,
+        input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
         select {
             width: 100%;
             padding: var(--control-padding);
@@ -225,6 +225,19 @@
             -moz-appearance: none;
             appearance: none;
             color-scheme: dark;
+        }
+
+        /* Checkbox és radio: natív megjelenés */
+        input[type="checkbox"],
+        input[type="radio"] {
+            width: auto;
+            height: auto;
+            min-height: 0;
+            appearance: auto;
+            -webkit-appearance: auto;
+            -moz-appearance: auto;
+            cursor: pointer;
+            margin: 0;
         }
 
         /* Select nyíl (Android custom) */
@@ -2754,10 +2767,12 @@
             stream = null;
 
             try {
-                // NATÍV kamera beállítások használata - ne korlátozzuk!
+                // NATÍV kamera beállítások: kérjük a MAX felbontást és FPS-t
                 const constraints = {
                     video: {
-                        // Ne korlátozzuk a felbontást és FPS-t, hadd válassza a kamera a legjobbat
+                        width: { ideal: 4096 },   // Max szélesség kérése
+                        height: { ideal: 4096 },  // Max magasság kérése
+                        frameRate: { ideal: 60 }, // Max FPS kérése
                         ...(id ? { deviceId: { exact: id } } : {})
                     },
                     audio: false
