@@ -2703,6 +2703,13 @@
             return 4;
         }
 
+        function getAutoRampDurationSec(fallback) {
+            if (autoStopEnabled && autoStopSec > 0) return autoStopSec;
+            if (recordedDurationSec && recordedDurationSec > 0) return recordedDurationSec;
+            if (isFinite(fallback) && fallback > 0) return fallback;
+            return 4;
+        }
+
         function applyAutoRampFromDuration() {
             if (!autoRampEnabled) return;
             const fileDur = (rawPlayback && isFinite(rawPlayback.duration) && rawPlayback.duration > 0)
