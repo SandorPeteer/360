@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.12 • S.P.</title>
+    <title>360 selfie • v1.2.13 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -360,8 +360,10 @@
         }
 
         #effectsList.scroll-area {
-            height: clamp(140px, 20vh, 220px);
-            max-height: clamp(140px, 20vh, 220px);
+            height: clamp(120px, 18vh, 200px);
+            max-height: clamp(120px, 18vh, 200px);
+            min-height: 120px;
+            display: block;
         }
 
         .effect-item {
@@ -774,8 +776,17 @@
 
         @media (max-height: 800px) {
             #effectsList.scroll-area {
-                height: clamp(120px, 18vh, 180px);
-                max-height: clamp(120px, 18vh, 180px);
+                height: clamp(110px, 16vh, 170px);
+                max-height: clamp(110px, 16vh, 170px);
+                min-height: 110px;
+            }
+        }
+
+        @media (max-height: 900px) {
+            #effectsList.scroll-area {
+                height: clamp(110px, 16vh, 180px);
+                max-height: clamp(110px, 16vh, 180px);
+                min-height: 110px;
             }
         }
 
