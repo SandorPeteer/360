@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.3.3 • S.P.</title>
+    <title>360 selfie • v1.5.1 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -219,6 +219,29 @@
             height: var(--control-height);
             box-shadow: var(--control-shadow);
             transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+
+            /* Android/Samsung dark mode fix */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            color-scheme: dark;
+        }
+
+        /* Select nyíl (Android custom) */
+        select {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8"><path fill="%2395a3b3" d="M1 1l5 5 5-5"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 10px;
+            padding-right: 24px;
+        }
+
+        /* Select option elemek (Android dropdown fix) */
+        select option {
+            background: var(--control-bg);
+            color: var(--text);
+            padding: 8px;
+            font-size: var(--control-font);
         }
 
         button {
@@ -1321,11 +1344,13 @@
                     <option>Betöltés...</option>
                 </select>
 
-                <label>Kimenet képarány</label>
-                <select id="outputAspect" onchange="applyOutputAspectFromUI()">
-                    <option value="landscape" selected>Fekvő 16:9</option>
-                    <option value="portrait">Álló 9:16</option>
-                </select>
+                <div id="orientationModeContainer">
+                    <!-- Desktop: manuális választó, Mobil/Tablet: auto info -->
+                </div>
+
+                <div style="padding: 8px; background: rgba(32, 211, 193, 0.1); border: 1px solid rgba(32, 211, 193, 0.3); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">
+                    ℹ️ A kamera natív felbontása, képaránya és FPS értéke kerül használatra a legjobb minőség érdekében
+                </div>
 
                 <label>Overlay illesztés</label>
                 <select id="overlayFit" onchange="applyOverlayFitFromUI()">
@@ -1579,28 +1604,91 @@
         // Végtelen onload ciklus megelőzése az overlay képkivágásnál
         let overlayCroppedOnce = false;
 
-        // Kimenet képarány / overlay illesztés
-        let outputAspectMode = 'landscape'; // 'landscape' | 'portrait'
+        // Overlay illesztés
         let overlayFitMode = 'stretch'; // 'stretch' | 'cover' | 'contain'
+
+        // Kimenet képarány kezelés
+        let outputAspectMode = 'landscape'; // 'landscape' | 'portrait'
+        let isAutoOrientationEnabled = false; // Mobil/tablet: auto, Desktop: manuális
+
+        // Detektáljuk, hogy mobil/tablet vagy desktop
+        function isMobileOrTablet() {
+            const ua = navigator.userAgent || '';
+            const isMobile = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+            const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            return isMobile || isTouch;
+        }
 
         // Forrás forgatás (NDI/telefon álló módhoz)
         let sourceRotateDeg = 0; // 0 | 90 | 270
 
-        // Ha a forrás fixen fekvő (16:9) és a kimenet álló (9:16), akkor mentéskor
-        // automatikusan elforgatjuk a forrást 270°-kal, KIVÉVE ha a felhasználó explicit
-        // beállított 90/270 forgatást.
+        // Automatikus orientáció frissítés (mobil/tablet)
+        function updateOrientationFromViewport() {
+            if (!isAutoOrientationEnabled) return;
+
+            const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
+            const newMode = isViewportPortrait ? 'portrait' : 'landscape';
+
+            if (outputAspectMode !== newMode) {
+                outputAspectMode = newMode;
+                console.log(`[AUTO-ORIENTATION] Váltás: ${outputAspectMode}`);
+
+                // Frissítsük az UI-t és a canvas-t
+                applyPreviewAspect();
+                if (currentMode === 'cam') {
+                    syncPreviewCanvasToMode(liveVideo);
+                }
+                applyLiveVideoTransform();
+                updateDateOverlayPreview();
+            }
+        }
+
+        // Orientáció change listener
+        function setupOrientationListener() {
+            const orientationMQ = window.matchMedia('(orientation: portrait)');
+
+            // Modern böngészők
+            if (orientationMQ.addEventListener) {
+                orientationMQ.addEventListener('change', updateOrientationFromViewport);
+            } else if (orientationMQ.addListener) {
+                // Régi Safari
+                orientationMQ.addListener(updateOrientationFromViewport);
+            }
+
+            // Fallback: window.orientationchange (iOS legacy)
+            window.addEventListener('orientationchange', () => {
+                setTimeout(updateOrientationFromViewport, 100);
+            });
+
+            // Fallback: window resize
+            window.addEventListener('resize', () => {
+                if (isAutoOrientationEnabled) {
+                    setTimeout(updateOrientationFromViewport, 100);
+                }
+            });
+        }
+
+        // Forgatás: user beállítás VAGY automatikus orientáció swap
         function getEffectiveRotateDeg(videoEl) {
-            // explicit user beállítás elsőbbséget élvez
+            // Explicit user beállítás (0, 90, vagy 270)
             const forced = sourceRotateDeg || 0;
             if (forced === 90 || forced === 270) return forced;
 
-            // Automatikus forgatás csak akkor, ha álló kimenetet kérsz ÉS a forrás ténylegesen fekvő (w>h)
-            if (outputAspectMode === 'portrait') {
-                const v = videoEl || liveVideo || rawPlayback;
-                const vw = (v && v.videoWidth) ? v.videoWidth : 0;
-                const vh = (v && v.videoHeight) ? v.videoHeight : 0;
-                if (vw > 0 && vh > 0 && vw > vh) return 270;
+            // Automatikus forgatás ha az outputAspectMode swap-et okoz
+            const v = videoEl || liveVideo || rawPlayback;
+            const vw = (v && v.videoWidth) ? v.videoWidth : 0;
+            const vh = (v && v.videoHeight) ? v.videoHeight : 0;
+
+            if (vw > 0 && vh > 0) {
+                const sourceIsPortrait = vh > vw;
+                const wantPortrait = (outputAspectMode === 'portrait');
+
+                // Ha swap kell, forgassuk 270°-kal
+                if (sourceIsPortrait !== wantPortrait) {
+                    return 270;
+                }
             }
+
             return 0;
         }
 
@@ -1644,7 +1732,6 @@
             const vc = document.getElementById('videoContainer');
             if (!vc) return;
 
-            const portrait = (outputAspectMode === 'portrait');
             const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
             const viewportWidth = window.innerWidth || 0;
             const viewportHeight = window.innerHeight || 0;
@@ -1652,24 +1739,29 @@
             vc.style.transformOrigin = '50% 50%';
             vc.style.transform = 'none';
 
-            if (portrait) {
-                // Álló kimenet (9:16)
-                const maxVh = getMaxVhForMode(true, viewportWidth, viewportHeight);
+            // Használjuk a canvas tényleges arányát (ami a kamera natív aránya)
+            if (canvas && canvas.width && canvas.height) {
+                const canvasAspect = canvas.width / canvas.height;
+                const isCanvasPortrait = canvasAspect < 1;
 
-                vc.style.aspectRatio = '9 / 16';
-                vc.style.width = 'auto';
-                vc.style.height = `${maxVh}dvh`;
-                vc.style.maxHeight = `${maxVh}dvh`;
-                vc.style.maxWidth = '100%';
-            } else {
-                // Fekvő kimenet (16:9)
-                const maxVh = getMaxVhForMode(false, viewportWidth, viewportHeight);
+                // Dinamikus maxVh érték a kamera arányához
+                const maxVh = getMaxVhForMode(isCanvasPortrait, viewportWidth, viewportHeight);
 
-                vc.style.aspectRatio = '16 / 9';
-                vc.style.width = '100%';
-                vc.style.height = 'auto';
-                vc.style.maxHeight = `${maxVh}dvh`;
-                vc.style.maxWidth = '100%';
+                vc.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
+
+                if (isCanvasPortrait) {
+                    // Álló kamera arány
+                    vc.style.width = 'auto';
+                    vc.style.height = `${maxVh}dvh`;
+                    vc.style.maxHeight = `${maxVh}dvh`;
+                    vc.style.maxWidth = '100%';
+                } else {
+                    // Fekvő kamera arány
+                    vc.style.width = '100%';
+                    vc.style.height = 'auto';
+                    vc.style.maxHeight = `${maxVh}dvh`;
+                    vc.style.maxWidth = '100%';
+                }
             }
             syncLastOutputWidth();
         }
@@ -1780,18 +1872,56 @@
             if (fpsTargetEl) fpsTargetEl.textContent = targetFpsText;
         }
 
-        function applyOutputAspectFromUI() {
-            const sel = document.getElementById('outputAspect');
-            outputAspectMode = sel ? sel.value : 'landscape';
-            document.body.setAttribute('data-aspect', outputAspectMode);
+        // Orientáció UI inicializálás (mobil=auto, desktop=manuális)
+        function initOrientationUI() {
+            const container = document.getElementById('orientationModeContainer');
+            if (!container) return;
 
-            // Előnézet keret képarány
+            const isMobile = isMobileOrTablet();
+
+            if (isMobile) {
+                // MOBIL/TABLET: Automatikus orientáció
+                isAutoOrientationEnabled = true;
+                container.innerHTML = `
+                    <div style="padding: 8px; background: rgba(32, 211, 193, 0.15); border: 1px solid rgba(32, 211, 193, 0.4); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">
+                        📱 Automatikus orientáció: forgasd a készüléket!
+                    </div>
+                `;
+
+                // Beállítjuk az aktuális orientációt
+                updateOrientationFromViewport();
+
+                // Listener beállítása
+                setupOrientationListener();
+            } else {
+                // DESKTOP: Manuális választó (NDI használathoz)
+                isAutoOrientationEnabled = false;
+                container.innerHTML = `
+                    <label>Kimenet képarány (NDI)</label>
+                    <select id="outputAspect" onchange="applyOutputAspectFromUI()">
+                        <option value="landscape" selected>Fekvő (landscape)</option>
+                        <option value="portrait">Álló (portrait)</option>
+                    </select>
+                `;
+            }
+        }
+
+        function applyOutputAspectFromUI() {
+            // Desktop: manuális választó értéke
+            if (!isAutoOrientationEnabled) {
+                const sel = document.getElementById('outputAspect');
+                if (sel) {
+                    outputAspectMode = sel.value;
+                }
+            }
+
+            // Előnézet keret frissítése
             applyPreviewAspect();
 
-            // Utolsó kimenet előnézet (a doboz ne torlódjon össze álló módban)
+            // Utolsó kimenet előnézet
             applyLastOutputAspectFromMode();
 
-            // Ha kamerán vagyunk, igazítsuk az előnézeti canvas méretét is (álló/fekvő váltásnál)
+            // Ha kamerán vagyunk, igazítsuk az előnézeti canvas méretét
             if (currentMode === 'cam') {
                 syncPreviewCanvasToMode(liveVideo);
             }
@@ -1954,33 +2084,24 @@
         }
 
         function chooseCanvasSizeByMode(sourceW, sourceH) {
-            // MINDIG használjuk a forrás felbontását a legjobb minőséghez
-            const mode = outputAspectMode;
+            // NATÍV kamera felbontás használata
             const sw = sourceW || 1280;
             const sh = sourceH || 720;
 
-            // Határozzuk meg a forrás képarányát
-            const sourceAspect = sw / sh;
+            // Határozd meg a kamera natív arányát
+            const sourceIsPortrait = sh > sw;
 
-            if (mode === 'portrait') {
-                // Álló kimenet (9:16)
-                if (sourceAspect > 1) {
-                    // Fekvő forrás → álló kimenet: swap
-                    return { w: Math.min(sw, sh), h: Math.max(sw, sh) };
-                } else {
-                    // Már álló forrás
-                    return { w: sw, h: sh };
-                }
-            } else {
-                // Fekvő kimenet (16:9)
-                if (sourceAspect < 1) {
-                    // Álló forrás → fekvő kimenet: swap
-                    return { w: Math.max(sw, sh), h: Math.min(sw, sh) };
-                } else {
-                    // Már fekvő forrás
-                    return { w: sw, h: sh };
-                }
+            // Határozd meg a kívánt kimenet arányát
+            const wantPortrait = (outputAspectMode === 'portrait');
+
+            // Ha a kamera aránya NEM egyezik a kívánt orientációval, SWAP!
+            if (sourceIsPortrait !== wantPortrait) {
+                // Felcseréljük a szélesség/magasság értékeit
+                return { w: sh, h: sw };
             }
+
+            // Egyébként natív méret
+            return { w: sw, h: sh };
         }
 
         function drawVideoCoverToRect(ctx2, videoEl, dx, dy, dw, dh) {
@@ -2237,18 +2358,13 @@
         function applyLastOutputAspectFromMode() {
             if (!lastOutputVideo) return;
 
-            // Fekvő: 16:9, Álló: 9:16
-            const ar = (outputAspectMode === 'portrait') ? '9/16' : '16/9';
+            // A videó saját aspect ratio-ját használja (natív kamera arány)
+            // Nincs kényszerített 9:16 vagy 16:9
             try {
-                lastOutputVideo.style.aspectRatio = ar;
+                lastOutputVideo.style.aspectRatio = 'auto';
             } catch (_) {
                 // Safari: nem baj
             }
-
-            // Álló módban túl magas lenne a lejátszó → a CSS limitál, itt csak data-attr-t állítunk
-            try {
-                document.body.setAttribute('data-aspect', outputAspectMode);
-            } catch (_) { }
         }
 
         function syncLastOutputWidth() {
@@ -2638,12 +2754,10 @@
             stream = null;
 
             try {
+                // NATÍV kamera beállítások használata - ne korlátozzuk!
                 const constraints = {
                     video: {
-                        width: { ideal: cameraWidth },
-                        height: { ideal: cameraHeight },
-                        // A virtuális kamerák (NDI/OBS) gyakran nem támogatják a szigorú max értéket.
-                        frameRate: cameraFps ? { ideal: cameraFps } : undefined,
+                        // Ne korlátozzuk a felbontást és FPS-t, hadd válassza a kamera a legjobbat
                         ...(id ? { deviceId: { exact: id } } : {})
                     },
                     audio: false
@@ -2677,40 +2791,20 @@
                 const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
                 const settings = track && track.getSettings ? track.getSettings() : null;
                 if (settings) {
+                    // Detektáljuk és mentjük el a kamera NATÍV beállításait
                     if (settings.width && settings.height) {
                         cameraWidth = settings.width;
                         cameraHeight = settings.height;
-                        setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (aktív)`);
+                        setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (natív)`);
                     }
                     if (settings.frameRate) {
                         cameraFps = Math.round(settings.frameRate);
-                        setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (aktív)`);
+                        setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (natív)`);
                     }
                 }
 
-                if (!autoMaxCameraApplied && track && track.getCapabilities) {
-                    const caps = track.getCapabilities();
-                    const maxW = caps.width && caps.width.max ? Math.round(caps.width.max) : 0;
-                    const maxH = caps.height && caps.height.max ? Math.round(caps.height.max) : 0;
-                    const maxF = caps.frameRate && caps.frameRate.max ? Math.round(caps.frameRate.max) : 0;
-                    const needRestart = (maxW && maxH && (maxW !== cameraWidth || maxH !== cameraHeight))
-                        || (maxF && maxF !== cameraFps);
-                    if (needRestart) {
-                        autoMaxCameraApplied = true;
-                        if (maxW && maxH) {
-                            cameraWidth = maxW;
-                            cameraHeight = maxH;
-                            setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (max)`);
-                        }
-                        if (maxF) {
-                            cameraFps = maxF;
-                            setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (max)`);
-                        }
-                        await startCamera();
-                        return;
-                    }
-                    autoMaxCameraApplied = true;
-                }
+                // Natív beállítások használata - nincs szükség újraindításra
+                autoMaxCameraApplied = true;
 
                 statusBadge.innerText = 'KÉSZENLÉT';
                 statusBadge.style.color = '#03dac6';
@@ -3594,8 +3688,8 @@
         }
 
         // Kamerák betöltése csak user gesture után (pl. módváltás / gombnyomás), különben a böngésző blokkolhatja.
+        initOrientationUI(); // Mobil: auto orientáció, Desktop: manuális választó
         applyOutputAspectFromUI();
-        document.body.setAttribute('data-aspect', outputAspectMode);
         applyOverlayFitFromUI();
         applyStartDelayFromUI();
         applyAutoStopFromUI();
