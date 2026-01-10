@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.11 • S.P.</title>
+    <title>360 selfie • v1.2.12 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -351,10 +351,17 @@
 
         .scroll-area {
             max-height: 150px;
+            overflow-y: auto;
+            overflow-x: hidden;
             border: 1px solid var(--border);
             background: #0c121a;
             padding: 5px;
             border-radius: 8px;
+        }
+
+        #effectsList.scroll-area {
+            height: clamp(140px, 20vh, 220px);
+            max-height: clamp(140px, 20vh, 220px);
         }
 
         .effect-item {
@@ -679,6 +686,7 @@
                 max-height: 32dvh;
                 min-height: 140px;
                 overflow-y: auto;
+                height: 32dvh;
             }
         }
 
@@ -747,6 +755,7 @@
                 max-height: 28vh;
                 min-height: 140px;
                 overflow-y: auto;
+                height: 28vh;
             }
 
             /* Gombok egy sorban maradjanak */
@@ -760,6 +769,13 @@
             .eff-actions {
                 flex-wrap: nowrap;
                 gap: 6px;
+            }
+        }
+
+        @media (max-height: 800px) {
+            #effectsList.scroll-area {
+                height: clamp(120px, 18vh, 180px);
+                max-height: clamp(120px, 18vh, 180px);
             }
         }
 
@@ -811,6 +827,7 @@
 
             #effectsList.scroll-area {
                 max-height: 28dvh;
+                height: 28dvh;
             }
         }
 
@@ -917,6 +934,7 @@
 
             #effectsList.scroll-area {
                 max-height: 28dvh;
+                height: 28dvh;
             }
         }
 
@@ -1330,7 +1348,7 @@
             <div id="effectsTimeline"
                 title="Kattints egy szegmensre: kijelölés. A 'Frissít' gomb a kijelölt szakaszt átírja a csúszkák alapján.">
             </div>
-            <div class="scroll-area" id="effectsList" style="margin-top:8px; max-height:180px;"></div>
+            <div class="scroll-area" id="effectsList" style="margin-top:8px;"></div>
             <div id="effectsSummary"></div>
 
             <label style="margin-top:10px; display:flex; align-items:center;">
