@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.19 • S.P.</title>
+    <title>360 selfie • v1.3.0 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -373,7 +373,7 @@
             height: auto;
             aspect-ratio: 16 / 9;
             /* alap: fekvő konténer */
-            max-height: 55vh;
+            max-height: 55dvh;
             background: #0a0f14;
             border: none;
             box-shadow: inset 0 0 0 2px var(--border);
@@ -475,8 +475,8 @@
         }
 
         #effectsList.scroll-area {
-            height: clamp(120px, 18vh, 200px);
-            max-height: clamp(120px, 18vh, 200px);
+            height: clamp(120px, 18dvh, 200px);
+            max-height: clamp(120px, 18dvh, 200px);
             min-height: 120px;
             display: block;
         }
@@ -805,7 +805,7 @@
             }
 
             /* Effektek: iPad álló módban ne lógjon ki semmi, és legyen mindig látható az idősáv */
-            .eff-divider { display: none !important; }
+            .eff-divider { display: none; }
 
             .eff-bottomrow {
                 flex-wrap: nowrap;
@@ -892,7 +892,7 @@
             }
 
             /* Effektek: a függőleges elválasztó ne jelenjen meg ezen a méreten (csík bug) */
-            .eff-divider { display: none !important; }
+            .eff-divider { display: none; }
 
             /* iPad-on a hosszú listák legyenek görgethetők a panelen belül */
             #effectsTimeline {
@@ -903,10 +903,10 @@
             }
 
             #effectsList.scroll-area {
-                max-height: 28vh;
+                max-height: 28dvh;
                 min-height: 140px;
                 overflow-y: auto;
-                height: 28vh;
+                height: 28dvh;
             }
 
             /* Gombok egy sorban maradjanak */
@@ -925,18 +925,14 @@
 
         @media (max-height: 800px) {
             #effectsList.scroll-area {
-                height: clamp(110px, 16vh, 170px);
-                max-height: clamp(110px, 16vh, 170px);
+                height: clamp(110px, 16dvh, 170px);
+                max-height: clamp(110px, 16dvh, 170px);
                 min-height: 110px;
             }
         }
 
         @media (max-height: 900px) {
-            #effectsList.scroll-area {
-                height: clamp(110px, 16vh, 180px);
-                max-height: clamp(110px, 16vh, 180px);
-                min-height: 110px;
-            }
+            
         }
 
         /* iPad Safari álló mód / rövid viewport: alacsony magasságnál egymás alá rendezés */
@@ -983,7 +979,7 @@
             }
 
             #videoContainer {
-                max-height: 32vh;
+                max-height: 32dvh;
             }
 
             #effectsList.scroll-area {
@@ -1025,7 +1021,7 @@
             }
 
             #videoContainer {
-                max-height: 48vh;
+                max-height: 48dvh;
             }
 
             input,
@@ -1089,7 +1085,7 @@
             }
 
             #videoContainer {
-                max-height: 30vh;
+                max-height: 30dvh;
                 border-radius: 10px;
             }
 
@@ -1098,11 +1094,6 @@
                 height: 28dvh;
             }
         }
-
-        #btnApplySelected {
-            display: none !important;
-        }
-
         /* Effektek idősáv – gyors átlátás */
         #effectsTimeline {
             height: 34px;
@@ -1196,32 +1187,26 @@
         }
 
         #lastOutput video {
-            max-height: 34vh;
+            max-height: 34dvh;
         }
 
         /* Álló módban a player túl magas lenne (9:16) – korlátozzuk */
         body[data-aspect="portrait"] #lastOutput video {
-            max-height: 28vh;
+            max-height: 28dvh;
         }
 
         /* Ha szűk a viewport, még agresszívebb limit */
         @media (max-height: 800px) {
             #lastOutput video {
-                max-height: 28vh;
+                max-height: 28dvh;
             }
 
             body[data-aspect="portrait"] #lastOutput video {
-                max-height: 24vh;
+                max-height: 24dvh;
             }
         }
 
         /* Álló módban a videoContainer sokkal kisebb helyet foglaljon */
-        body[data-aspect="portrait"] #videoContainer {
-            max-height: 30vh;
-        }
-
-        /* iPad és kisebb készülékeken álló módban még kompaktabb - NEM használjuk, mert a JS állítja */
-
     </style>
 </head>
 
@@ -1619,6 +1604,20 @@
             return 0;
         }
 
+        
+        // Helper: Max VH számítás módhoz
+        function getMaxVhForMode(portrait, viewportWidth, viewportHeight) {
+            if (portrait) {
+                if (viewportWidth <= 700) return 35;
+                if (viewportWidth <= 1024) return 40;
+                return (viewportHeight <= 760) ? 50 : 60;
+            } else {
+                if (viewportWidth <= 700) return 28;
+                if (viewportWidth <= 1024) return 30;
+                return 55;
+            }
+        }
+
         function applyPreviewAspect() {
             const vc = document.getElementById('videoContainer');
             if (!vc) return;
@@ -1639,42 +1638,25 @@
             if (portrait) {
                 // Álló előnézet keret: ténylegesen 9:16, NEM forgatjuk a konténert.
                 // Így a doboz nem fog "kilógni" a középső panelből.
-                const h = viewportHeight;
-                let maxVh = (h && h <= 760) ? 50 : 60;
-
-                // iPad/mobil álló nézetben még kisebb
-                if (isViewportPortrait && viewportWidth <= 1024) {
-                    maxVh = Math.min(maxVh, 40);
-                }
-                if (isViewportPortrait && viewportWidth <= 700) {
-                    maxVh = Math.min(maxVh, 35);
-                }
+                const maxVh = getMaxVhForMode(true, viewportWidth, viewportHeight);
 
                 vc.style.transform = 'none';
                 vc.style.aspectRatio = '9 / 16';
 
                 // Stabil illesztés: kisebb max magasság álló módban, hogy maradjon hely a kontrolloknak.
                 // (Ha a panel szűk, a maxWidth=100% fogja meg.)
-                vc.style.height = `${maxVh}vh`;
-                vc.style.maxHeight = `${maxVh}vh`;
-                vc.style.width = `calc(${maxVh}vh * 9 / 16)`;
+                vc.style.height = `${maxVh}dvh`;
+                vc.style.maxHeight = `${maxVh}dvh`;
+                vc.style.width = `calc(${maxVh}dvh * 9 / 16)`;
                 vc.style.maxWidth = '100%';
             } else {
                 // Fekvő kimenet
+                const maxVh = getMaxVhForMode(false, viewportWidth, viewportHeight);
+
                 vc.style.aspectRatio = '16 / 9';
                 vc.style.width = '100%';
                 vc.style.height = 'auto';
-
-                let maxVh = 70;
-                // iPad/mobil álló viewport esetén kisebb fekvő preview
-                if (isViewportPortrait && viewportWidth <= 1024) {
-                    maxVh = 30;
-                }
-                if (isViewportPortrait && viewportWidth <= 700) {
-                    maxVh = 28;
-                }
-
-                vc.style.maxHeight = `${maxVh}vh`;
+                vc.style.maxHeight = `${maxVh}dvh`;
                 vc.style.transform = 'none';
                 vc.style.maxWidth = '100%';
             }
@@ -2447,7 +2429,7 @@
         var(--bg-0);
       display:grid;
       grid-template-columns:minmax(0,1fr) 320px;
-      height:100vh;
+      height:100dvh;
       overflow:hidden;
     }
     #main{
@@ -3346,6 +3328,37 @@
             void startRecordingNow();
         }
 
+        
+        // Helper: Overlay rajzolás canvas-ra
+        function drawOverlayToCanvas(ctx, w, h) {
+            if (!overlayReady && !(overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalHeight > 0)) {
+                return;
+            }
+            try {
+                if (overlayFitMode === 'stretch') {
+                    ctx.drawImage(overlayImg, 0, 0, w, h);
+                } else {
+                    const iw = overlayImg.naturalWidth;
+                    const ih = overlayImg.naturalHeight;
+                    const iAsp = iw / ih;
+                    const dAsp = w / h;
+                    let dw, dh;
+                    if (overlayFitMode === 'contain') {
+                        if (iAsp > dAsp) { dw = w; dh = Math.round(w / iAsp); }
+                        else { dh = h; dw = Math.round(h * iAsp); }
+                    } else {
+                        if (iAsp > dAsp) { dh = h; dw = Math.round(h * iAsp); }
+                        else { dw = w; dh = Math.round(w / iAsp); }
+                    }
+                    const dx = Math.round((w - dw) / 2);
+                    const dy = Math.round((h - dh) / 2);
+                    ctx.drawImage(overlayImg, dx, dy, dw, dh);
+                }
+            } catch (e) {
+                console.warn('[OVERLAY] drawImage failed:', e);
+            }
+        }
+
         // --- 5. FŐ FELDOLGOZÓ LOOP (KÖZÖS MINDKÉT MÓDHÓZ) ---
         async function startProcessingLoop() {
             isProcessing = true;
@@ -3498,37 +3511,7 @@
                 while (performance.now() - s < d) {
                     drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
                     // Overlay: stabilan csak akkor rajzoljuk, ha betöltött; tartalék naturalWidth alapján
-                    if (overlayReady || (overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalHeight > 0)) {
-                        try {
-                            if (overlayFitMode === 'stretch') {
-                                // Pont a szélekhez: torzíthat (de ez a cél)
-                                ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
-                            } else {
-                                // contain/cover: arányt tartunk, és középre tesszük
-                                const iw = overlayImg.naturalWidth;
-                                const ih = overlayImg.naturalHeight;
-                                const dstW = canvas.width;
-                                const dstH = canvas.height;
-                                const iAsp = iw / ih;
-                                const dAsp = dstW / dstH;
-
-                                let dw, dh;
-                                if (overlayFitMode === 'contain') {
-                                    if (iAsp > dAsp) { dw = dstW; dh = Math.round(dstW / iAsp); }
-                                    else { dh = dstH; dw = Math.round(dstH * iAsp); }
-                                } else {
-                                    // cover
-                                    if (iAsp > dAsp) { dh = dstH; dw = Math.round(dstH * iAsp); }
-                                    else { dw = dstW; dh = Math.round(dstW / iAsp); }
-                                }
-                                const dx = Math.round((dstW - dw) / 2);
-                                const dy = Math.round((dstH - dh) / 2);
-                                ctx.drawImage(overlayImg, dx, dy, dw, dh);
-                            }
-                        } catch (e) {
-                            console.warn('[OVERLAY] drawImage failed:', e);
-                        }
-                    }
+                    drawOverlayToCanvas(ctx, canvas.width, canvas.height);
                     if (isDateOverlayEnabled()) {
                         drawDateStamp(ctx, canvas.width, canvas.height);
                     }
@@ -3558,34 +3541,7 @@
                     const step = (frameMs / 1000) * (seg.speed || 1);
                     while (performance.now() - s < d) {
                         drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
-                        if (overlayReady || (overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalHeight > 0)) {
-                            try {
-                                if (overlayFitMode === 'stretch') {
-                                    ctx.drawImage(overlayImg, 0, 0, canvas.width, canvas.height);
-                                } else {
-                                    const iw = overlayImg.naturalWidth;
-                                    const ih = overlayImg.naturalHeight;
-                                    const dstW = canvas.width;
-                                    const dstH = canvas.height;
-                                    const iAsp = iw / ih;
-                                    const dAsp = dstW / dstH;
-
-                                    let dw, dh;
-                                    if (overlayFitMode === 'contain') {
-                                        if (iAsp > dAsp) { dw = dstW; dh = Math.round(dstW / iAsp); }
-                                        else { dh = dstH; dw = Math.round(dstH * iAsp); }
-                                    } else {
-                                        if (iAsp > dAsp) { dh = dstH; dw = Math.round(dstH * iAsp); }
-                                        else { dw = dstW; dh = Math.round(dstW / iAsp); }
-                                    }
-                                    const dx = Math.round((dstW - dw) / 2);
-                                    const dy = Math.round((dstH - dh) / 2);
-                                    ctx.drawImage(overlayImg, dx, dy, dw, dh);
-                                }
-                            } catch (e) {
-                                console.warn('[OVERLAY] drawImage failed:', e);
-                            }
-                        }
+                        drawOverlayToCanvas(ctx, canvas.width, canvas.height);
                         if (isDateOverlayEnabled()) {
                             drawDateStamp(ctx, canvas.width, canvas.height);
                         }
