@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.18 • S.P.</title>
+    <title>360 selfie • v1.2.19 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -3647,7 +3647,12 @@
         applySourceRotateFromUI();
         applyLastOutputAspectFromMode();
         syncLastOutputWidth();
-        window.addEventListener('resize', () => {
+        function updateUiScale() {
+            document.documentElement.style.setProperty('--ui-scale', '1');
+        }
+
+        function handleOrientationOrResize() {
+            updateUiScale();
             applyPreviewAspect();
             if (currentMode === 'cam') {
                 syncPreviewCanvasToMode(liveVideo);
@@ -3657,6 +3662,13 @@
             setTimeout(applyLiveVideoTransform, 50);
             syncLastOutputWidth();
             updateDateOverlayPreview();
+        }
+
+        window.addEventListener('resize', handleOrientationOrResize);
+        window.addEventListener('orientationchange', () => {
+            // Kis késleltetés, hogy a viewport stabilizálódjon
+            setTimeout(handleOrientationOrResize, 100);
+            setTimeout(handleOrientationOrResize, 300);
         });
         renderList();
 
@@ -3732,13 +3744,8 @@
             }
         });
 
-        function updateUiScale() {
-            document.documentElement.style.setProperty('--ui-scale', '1');
-        }
-
+        // updateUiScale és event listener inicializálás már korábban megtörtént
         updateUiScale();
-        window.addEventListener('resize', updateUiScale);
-        window.addEventListener('orientationchange', updateUiScale);
     </script>
 </body>
 
