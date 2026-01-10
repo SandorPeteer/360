@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.3.0 • S.P.</title>
+    <title>360 selfie • v1.3.2 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -1607,13 +1607,25 @@
         
         // Helper: Max VH számítás módhoz
         function getMaxVhForMode(portrait, viewportWidth, viewportHeight) {
+            const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
+
             if (portrait) {
+                // Álló kimenet (9:16)
                 if (viewportWidth <= 700) return 35;
                 if (viewportWidth <= 1024) return 40;
                 return (viewportHeight <= 760) ? 50 : 60;
             } else {
-                if (viewportWidth <= 700) return 28;
-                if (viewportWidth <= 1024) return 30;
+                // Fekvő kimenet (16:9)
+                // Ha a viewport is fekvő, normál értékek
+                if (!isViewportPortrait) {
+                    if (viewportWidth <= 900) return 48;
+                    return 55;
+                }
+
+                // Ha viewport álló, DE kimenet fekvő → NE korlátozzuk túl kicsire!
+                // iPad álló nézetben fekvő videóhoz elegendő hely kell
+                if (viewportWidth <= 700) return 35;  // Mobil: kisebb
+                if (viewportWidth <= 1024) return 45; // iPad: nagyobb (volt 30!)
                 return 55;
             }
         }
@@ -1795,11 +1807,7 @@
         function applyOverlayFitFromUI() {
             const sel = document.getElementById('overlayFit');
             overlayFitMode = sel ? sel.value : 'stretch';
-
-            // Élő előnézet kép illesztése
-            if (overlayFitMode === 'stretch') overlayImg.style.objectFit = 'fill';
-            else if (overlayFitMode === 'contain') overlayImg.style.objectFit = 'contain';
-            else overlayImg.style.objectFit = 'cover';
+            // Az overlay illesztés most már csak a canvas rajzolásnál használódik (drawOverlayToCanvas)
         }
 
         function applySourceCropFromUI() {
@@ -2186,6 +2194,8 @@
             try {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 drawVideoCoverRotated(ctx, liveVideo, canvas.width, canvas.height, getEffectiveRotateDeg(liveVideo));
+                // Overlay faltól-falig a canvas méretéhez igazodva (mint a render loop-ban)
+                drawOverlayToCanvas(ctx, canvas.width, canvas.height);
                 if (isDateOverlayEnabled()) {
                     drawDateStamp(ctx, canvas.width, canvas.height);
                 }
@@ -3062,19 +3072,10 @@
                 return;
             }
 
-            // Élő előnézet: a videó/canvas fölé tesszük az IMG-t
-            overlayImg.style.display = 'block';
-            overlayImg.style.position = 'absolute';
-            overlayImg.style.left = '0';
-            overlayImg.style.top = '0';
-            overlayImg.style.width = '100%';
-            overlayImg.style.height = '100%';
-            // Illesztés a UI szerint
-            if (overlayFitMode === 'stretch') overlayImg.style.objectFit = 'fill';
-            else if (overlayFitMode === 'contain') overlayImg.style.objectFit = 'contain';
-            else overlayImg.style.objectFit = 'cover';
+            // Az overlay CSAK canvas-on rajzolódik, az IMG elem rejtve marad
+            // (régebben DOM overlay volt, de az nem tartotta az arányokat)
+            overlayImg.style.display = 'none';
             overlayImg.style.pointerEvents = 'none';
-            overlayImg.style.zIndex = '4'; // statusBadge zIndex=5
 
             overlayImg.onload = () => {
                 overlayReady = true;
