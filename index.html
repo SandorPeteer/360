@@ -1428,7 +1428,7 @@
                         </div>
 
                         <label>Kamera felbontás</label>
-                        <select id="cameraResolution" onchange="applyCameraResolutionFromUI()">
+                        <select id="cameraResolution" onchange="applyCameraResolutionFromUI(true)">
                             <option value="1280x720">1280×720 (HD)</option>
                             <option value="1920x1080" selected>1920×1080 (Full HD)</option>
                             <option value="2560x1440">2560×1440 (QHD)</option>
@@ -1436,7 +1436,7 @@
                         </select>
 
                         <label>Kamera FPS</label>
-                        <select id="cameraFps" onchange="applyCameraFpsFromUI()">
+                        <select id="cameraFps" onchange="applyCameraFpsFromUI(true)">
                             <option value="24">24 fps</option>
                             <option value="30">30 fps</option>
                             <option value="60" selected>60 fps</option>
@@ -1473,10 +1473,11 @@
                 <div class="signal-info">
                     <div class="signal-head">Bejövő jel</div>
                     <div class="signal-row"><span>Forrás</span><span id="signalSourceLabel">-</span></div>
-                    <div class="signal-row"><span>Felbontás</span><span id="signalRes">-</span></div>
-                    <div class="signal-row"><span>FPS (mért)</span><span id="signalFps">-</span></div>
-                    <details class="fold">
-                        <summary>Részletek</summary>
+                <div class="signal-row"><span>Felbontás</span><span id="signalRes">-</span></div>
+                <div class="signal-row"><span>FPS (mért)</span><span id="signalFps">-</span></div>
+                <div class="signal-row"><span>Auto választás</span><span id="autoTuneInfo">-</span></div>
+                <details class="fold">
+                    <summary>Részletek</summary>
                         <div class="fold-body">
                             <label>Info mód</label>
                             <select id="signalSource" onchange="applySignalSourceFromUI()">
@@ -1589,6 +1590,8 @@
         let useSourceResolution = true;
         const previewMaxEdge = 1280;
         let autoMaxCameraApplied = false;
+        let autoCameraTuned = false;
+        let userCameraChoiceTouched = false;
         let sourceCropPct = { top: 0, right: 0, bottom: 0, left: 0 };
         let isRecording = false;
         let pendingStartRecord = false;
@@ -1860,6 +1863,7 @@
             const resEl = document.getElementById('signalRes');
             const fpsEl = document.getElementById('signalFps');
             const fpsTargetEl = document.getElementById('signalFpsTarget');
+            const autoEl = document.getElementById('autoTuneInfo');
             const el = pickSignalVideoEl();
 
             if (!el) return;
@@ -1884,6 +1888,7 @@
                 targetFpsText = renderFps ? `${renderFps} fps` : '-';
             }
             if (fpsTargetEl) fpsTargetEl.textContent = targetFpsText;
+            if (autoEl) autoEl.textContent = autoCameraTuned ? 'AUTO OK' : '-';
         }
 
         // Orientáció UI inicializálás (mobil=auto, desktop=manuális)
@@ -2024,16 +2029,17 @@
             }
         }
 
-        function applyCameraFpsFromUI() {
+        function applyCameraFpsFromUI(fromUser) {
             const sel = document.getElementById('cameraFps');
             const v = sel ? parseInt(sel.value, 10) : 60;
             cameraFps = isFinite(v) ? v : 60;
+            if (fromUser) userCameraChoiceTouched = true;
             if (currentMode === 'cam' && stream) {
                 startCamera();
             }
         }
 
-        function applyCameraResolutionFromUI() {
+        function applyCameraResolutionFromUI(fromUser) {
             const sel = document.getElementById('cameraResolution');
             const val = sel ? String(sel.value || '1280x720') : '1280x720';
             const parts = val.split('x').map((n) => parseInt(n, 10));
@@ -2041,6 +2047,7 @@
             const h = parts[1] || 720;
             cameraWidth = w;
             cameraHeight = h;
+            if (fromUser) userCameraChoiceTouched = true;
             if (currentMode === 'cam' && stream) {
                 startCamera();
             }
@@ -2068,11 +2075,80 @@
         function applyUseSourceResolutionFromUI() {
             const chk = document.getElementById('useSourceResolution');
             useSourceResolution = !!(chk && chk.checked);
+            if (useSourceResolution) {
+                autoCameraTuned = false;
+            }
             applyPreviewAspect();
             syncPreviewCanvasToMode(liveVideo);
             syncLastOutputWidth();
             if (currentMode === 'cam' && stream) {
                 startCamera();
+            }
+        }
+
+        function getAspectCandidates(targetAspect, maxW, maxH) {
+            const base = [
+                { w: 3840, h: 2160 },
+                { w: 2560, h: 1440 },
+                { w: 1920, h: 1080 },
+                { w: 1280, h: 720 },
+                { w: 960, h: 540 },
+                { w: 854, h: 480 },
+                { w: 640, h: 360 }
+            ];
+            const list = base.map((c) => {
+                const isPortrait = targetAspect < 1;
+                return isPortrait ? { w: c.h, h: c.w } : { w: c.w, h: c.h };
+            });
+            return list.filter((c) => c.w <= maxW && c.h <= maxH);
+        }
+
+        function scoreSettings(s) {
+            const fps = Number(s.frameRate) || 0;
+            const area = (Number(s.width) || 0) * (Number(s.height) || 0);
+            return { fps, area };
+        }
+
+        async function autoTuneCameraForBestFps(track) {
+            if (!track || typeof track.getCapabilities !== 'function') return;
+            const caps = track.getCapabilities();
+            if (!caps || !caps.width || !caps.height || !caps.frameRate) return;
+
+            const maxW = caps.width.max || caps.width.ideal || 0;
+            const maxH = caps.height.max || caps.height.ideal || 0;
+            const maxFps = caps.frameRate.max || caps.frameRate.ideal || 60;
+            if (!maxW || !maxH) return;
+
+            const targetAspect = (outputAspectMode === 'portrait') ? (9 / 16) : (16 / 9);
+            const candidates = getAspectCandidates(targetAspect, maxW, maxH);
+            if (!candidates.length) return;
+
+            let best = null;
+            for (const c of candidates) {
+                try {
+                    await track.applyConstraints({
+                        width: { ideal: c.w },
+                        height: { ideal: c.h },
+                        frameRate: { ideal: maxFps }
+                    });
+                } catch (_) {
+                    continue;
+                }
+                const s = track.getSettings ? track.getSettings() : {};
+                const score = scoreSettings(s);
+                if (!best || score.fps > best.score.fps || (score.fps === best.score.fps && score.area > best.score.area)) {
+                    best = { score, settings: s, constraints: c };
+                }
+            }
+
+            if (best && best.constraints) {
+                try {
+                    await track.applyConstraints({
+                        width: { ideal: best.constraints.w },
+                        height: { ideal: best.constraints.h },
+                        frameRate: { ideal: maxFps }
+                    });
+                } catch (_) { }
             }
         }
 
@@ -2824,6 +2900,10 @@
                 drawLivePreviewLoop();
 
                 const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+                if (track && !userCameraChoiceTouched && useSourceResolution && !autoCameraTuned) {
+                    await autoTuneCameraForBestFps(track);
+                    autoCameraTuned = true;
+                }
                 const settings = track && track.getSettings ? track.getSettings() : null;
                 if (settings) {
                     // Natív beállítások csak akkor írják felül a UI-t, ha az opció aktív
@@ -2831,14 +2911,30 @@
                         if (useNative) {
                             cameraWidth = settings.width;
                             cameraHeight = settings.height;
-                            setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (natív)`);
+                            setSelectValueOrAdd(
+                                document.getElementById('cameraResolution'),
+                                `${cameraWidth}x${cameraHeight}`,
+                                `${cameraWidth}x${cameraHeight} (auto)`
+                            );
                         }
                     }
                     if (settings.frameRate) {
                         if (useNative) {
                             cameraFps = Math.round(settings.frameRate);
-                            setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (natív)`);
+                            setSelectValueOrAdd(
+                                document.getElementById('cameraFps'),
+                                String(cameraFps),
+                                `${cameraFps} fps (auto)`
+                            );
                         }
+                    }
+                }
+                const autoEl = document.getElementById('autoTuneInfo');
+                if (autoEl) {
+                    if (useNative && autoCameraTuned && settings && settings.width && settings.height && settings.frameRate) {
+                        autoEl.textContent = `${settings.width}x${settings.height} @ ${Math.round(settings.frameRate)} fps`;
+                    } else {
+                        autoEl.textContent = autoCameraTuned ? 'AUTO OK' : '-';
                     }
                 }
 
