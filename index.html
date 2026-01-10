@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.2.10 • S.P.</title>
+    <title>360 selfie • v1.2.11 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -488,6 +488,36 @@
             font-size: 12px;
             margin: 0;
             white-space: nowrap;
+        }
+
+        .signal-info {
+            border: 1px solid var(--border);
+            background: #0f141d;
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 11px;
+        }
+
+        .signal-head {
+            color: var(--accent);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .signal-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            color: var(--muted);
+        }
+
+        .signal-row span:last-child {
+            color: var(--text);
+            font-weight: 600;
         }
 
         .ramp-presets {
@@ -1140,6 +1170,40 @@
                     <option value="270">270° (álló – jobbra)</option>
                 </select>
 
+                <label>Forrás vágás (%)</label>
+                <div class="date-offset-row">
+                    <div class="date-offset-item">
+                        <div class="date-offset-head">
+                            <span>Felül</span>
+                            <span id="sourceCropTopVal">0</span>
+                        </div>
+                        <input type="range" id="sourceCropTop" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                    </div>
+                    <div class="date-offset-item">
+                        <div class="date-offset-head">
+                            <span>Alul</span>
+                            <span id="sourceCropBottomVal">0</span>
+                        </div>
+                        <input type="range" id="sourceCropBottom" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                    </div>
+                </div>
+                <div class="date-offset-row">
+                    <div class="date-offset-item">
+                        <div class="date-offset-head">
+                            <span>Bal</span>
+                            <span id="sourceCropLeftVal">0</span>
+                        </div>
+                        <input type="range" id="sourceCropLeft" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                    </div>
+                    <div class="date-offset-item">
+                        <div class="date-offset-head">
+                            <span>Jobb</span>
+                            <span id="sourceCropRightVal">0</span>
+                        </div>
+                        <input type="range" id="sourceCropRight" min="0" max="20" step="1" value="0" oninput="applySourceCropFromUI()">
+                    </div>
+                </div>
+
                 <label>Start késleltetés (mp)</label>
                 <input type="number" id="recordDelay" value="0" min="0" max="30" step="1" oninput="applyStartDelayFromUI()">
 
@@ -1148,6 +1212,28 @@
                     <input type="number" id="autoStopSec" value="10" min="5" max="120" step="1" oninput="applyAutoStopFromUI()">
                 </label>
 
+                <label>Kamera felbontás</label>
+                <select id="cameraResolution" onchange="applyCameraResolutionFromUI()">
+                    <option value="1280x720">1280×720 (HD)</option>
+                    <option value="1920x1080" selected>1920×1080 (Full HD)</option>
+                    <option value="2560x1440">2560×1440 (QHD)</option>
+                    <option value="3840x2160">3840×2160 (4K)</option>
+                </select>
+
+                <label>Kamera FPS</label>
+                <select id="cameraFps" onchange="applyCameraFpsFromUI()">
+                    <option value="24">24 fps</option>
+                    <option value="30">30 fps</option>
+                    <option value="60" selected>60 fps</option>
+                </select>
+
+                <label>Előnézet FPS</label>
+                <select id="previewFps" onchange="applyPreviewFpsFromUI()">
+                    <option value="20">20 fps</option>
+                    <option value="24">24 fps</option>
+                    <option value="30" selected>30 fps</option>
+                </select>
+
                 <label>Minőség</label>
                 <select id="qualityPreset" onchange="applyQualityFromUI()">
                     <option value="low">Alacsony (2.5 Mbps • 24 fps)</option>
@@ -1155,12 +1241,31 @@
                     <option value="high" selected>Magas (8 Mbps • 30 fps)</option>
                 </select>
 
+                <label style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="useSourceResolution" style="width:auto;" onchange="applyUseSourceResolutionFromUI()" checked>
+                    Eredeti felbontás (max)
+                </label>
+
                 <label>Preferált formátum</label>
                 <select id="formatPref" onchange="applyFormatFromUI()">
                     <option value="auto" selected>Auto (böngésző dönt)</option>
                     <option value="mp4">MP4 (ha támogatott)</option>
                     <option value="webm">WebM</option>
                 </select>
+
+                <div class="signal-info">
+                    <div class="signal-head">Bejövő jel</div>
+                    <label>Info mód</label>
+                    <select id="signalSource" onchange="applySignalSourceFromUI()">
+                        <option value="auto" selected>Automatikus</option>
+                        <option value="live">Kamera / élő</option>
+                        <option value="file">Fájl / lejátszás</option>
+                    </select>
+                    <div class="signal-row"><span>Forrás</span><span id="signalSourceLabel">-</span></div>
+                    <div class="signal-row"><span>Felbontás</span><span id="signalRes">-</span></div>
+                    <div class="signal-row"><span>FPS (mért)</span><span id="signalFps">-</span></div>
+                    <div class="signal-row"><span>FPS (beállítás)</span><span id="signalFpsTarget">-</span></div>
+                </div>
 
                 <button id="startBtn" class="btn-start" onclick="initiateCamSequence()">FELVÉTEL START</button>
             </div>
@@ -1184,7 +1289,7 @@
 
             <h3>4. Effektek</h3>
             <label style="margin-top:4px; display:flex; align-items:center;">
-                <input type="checkbox" id="autoRampMode" style="width:auto; margin-right:8px;" checked> Auto ramp (A mód)
+                <input type="checkbox" id="autoRampMode" style="width:auto; margin-right:8px;"> Auto ramp (A mód)
             </label>
             <div class="ramp-presets" role="group" aria-label="Ramp preset">
                 <button type="button" data-ramp-preset="balanced">Balanced</button>
@@ -1249,12 +1354,19 @@
         let rawVideoBlob = null;
         let rawVideoUrl = null;
         let currentLogoData = null;
-        let autoRampEnabled = true;
+        let autoRampEnabled = false;
         let currentRampPresetKey = 'balanced';
         let qualityPreset = 'high';
         let renderFps = 30;
         let videoBitsPerSecond = 8000000;
         let preferredFormat = 'auto';
+        let cameraFps = 60;
+        let previewFps = 30;
+        let cameraWidth = 1280;
+        let cameraHeight = 720;
+        let useSourceResolution = true;
+        let autoMaxCameraApplied = false;
+        let sourceCropPct = { top: 0, right: 0, bottom: 0, left: 0 };
         let isRecording = false;
         let pendingStartRecord = false;
         let pendingStartTimer = 0;
@@ -1264,6 +1376,14 @@
         let autoStopEnabled = false;
         let autoStopSec = 10;
         let autoStopTimer = 0;
+        let signalSourceMode = 'auto';
+        let signalInfoTimer = 0;
+        let signalFpsValue = 0;
+        let signalFpsFrames = 0;
+        let signalFpsLastTs = 0;
+        let signalFpsRafId = 0;
+        let signalFpsVideoEl = null;
+        let autoRampUserTouched = false;
 
         // Overlay betöltés állapot (stabil rajzolás + hibakeresés)
         let overlayReady = false;
@@ -1373,6 +1493,76 @@
             }
         }
 
+        function pickSignalVideoEl() {
+            if (signalSourceMode === 'live') return liveVideo;
+            if (signalSourceMode === 'file') return rawPlayback;
+            if (currentMode === 'cam' && liveVideo && liveVideo.srcObject) return liveVideo;
+            if (rawPlayback && rawPlayback.src) return rawPlayback;
+            return liveVideo || rawPlayback;
+        }
+
+        function stopSignalFpsMeter() {
+            if (signalFpsVideoEl && typeof signalFpsVideoEl.cancelVideoFrameCallback === 'function' && signalFpsRafId) {
+                try { signalFpsVideoEl.cancelVideoFrameCallback(signalFpsRafId); } catch (_) { }
+            }
+            signalFpsRafId = 0;
+            signalFpsVideoEl = null;
+            signalFpsFrames = 0;
+            signalFpsLastTs = 0;
+            signalFpsValue = 0;
+        }
+
+        function startSignalFpsMeter(el) {
+            stopSignalFpsMeter();
+            if (!el) return;
+            signalFpsVideoEl = el;
+            if (typeof el.requestVideoFrameCallback === 'function') {
+                const onFrame = (now) => {
+                    signalFpsFrames += 1;
+                    if (!signalFpsLastTs) signalFpsLastTs = now;
+                    const dt = now - signalFpsLastTs;
+                    if (dt >= 1000) {
+                        signalFpsValue = (signalFpsFrames * 1000) / dt;
+                        signalFpsFrames = 0;
+                        signalFpsLastTs = now;
+                    }
+                    signalFpsRafId = el.requestVideoFrameCallback(onFrame);
+                };
+                signalFpsRafId = el.requestVideoFrameCallback(onFrame);
+            }
+        }
+
+        function updateSignalInfo(forceRestart) {
+            const srcLabel = document.getElementById('signalSourceLabel');
+            const resEl = document.getElementById('signalRes');
+            const fpsEl = document.getElementById('signalFps');
+            const fpsTargetEl = document.getElementById('signalFpsTarget');
+            const el = pickSignalVideoEl();
+
+            if (!el) return;
+            if (forceRestart || signalFpsVideoEl !== el) startSignalFpsMeter(el);
+
+            const hasStream = !!el.srcObject;
+            const srcText = hasStream ? 'Kamera (MediaStream)' : (el.src ? 'Fájl / stream' : 'Nincs jel');
+            if (srcLabel) srcLabel.textContent = srcText;
+
+            const w = el.videoWidth || 0;
+            const h = el.videoHeight || 0;
+            if (resEl) resEl.textContent = (w && h) ? `${w}×${h}` : '-';
+
+            if (fpsEl) fpsEl.textContent = signalFpsValue ? `${signalFpsValue.toFixed(1)} fps` : '-';
+
+            let targetFpsText = '-';
+            if (hasStream) {
+                const track = el.srcObject.getVideoTracks ? el.srcObject.getVideoTracks()[0] : null;
+                const settings = track && track.getSettings ? track.getSettings() : null;
+                if (settings && settings.frameRate) targetFpsText = `${settings.frameRate} fps`;
+            } else if (el === rawPlayback) {
+                targetFpsText = renderFps ? `${renderFps} fps` : '-';
+            }
+            if (fpsTargetEl) fpsTargetEl.textContent = targetFpsText;
+        }
+
         function applyOutputAspectFromUI() {
             const sel = document.getElementById('outputAspect');
             outputAspectMode = sel ? sel.value : 'landscape';
@@ -1406,6 +1596,46 @@
             else overlayImg.style.objectFit = 'cover';
         }
 
+        function applySourceCropFromUI() {
+            const top = document.getElementById('sourceCropTop');
+            const right = document.getElementById('sourceCropRight');
+            const bottom = document.getElementById('sourceCropBottom');
+            const left = document.getElementById('sourceCropLeft');
+            const t = top ? parseInt(top.value, 10) : 0;
+            const r = right ? parseInt(right.value, 10) : 0;
+            const b = bottom ? parseInt(bottom.value, 10) : 0;
+            const l = left ? parseInt(left.value, 10) : 0;
+            sourceCropPct = {
+                top: isFinite(t) ? t : 0,
+                right: isFinite(r) ? r : 0,
+                bottom: isFinite(b) ? b : 0,
+                left: isFinite(l) ? l : 0
+            };
+            const topVal = document.getElementById('sourceCropTopVal');
+            const rightVal = document.getElementById('sourceCropRightVal');
+            const bottomVal = document.getElementById('sourceCropBottomVal');
+            const leftVal = document.getElementById('sourceCropLeftVal');
+            if (topVal) topVal.textContent = String(sourceCropPct.top);
+            if (rightVal) rightVal.textContent = String(sourceCropPct.right);
+            if (bottomVal) bottomVal.textContent = String(sourceCropPct.bottom);
+            if (leftVal) leftVal.textContent = String(sourceCropPct.left);
+        }
+
+        function getSourceCropPx(videoEl) {
+            const vw = videoEl.videoWidth || 0;
+            const vh = videoEl.videoHeight || 0;
+            const t = Math.min(40, Math.max(0, sourceCropPct.top));
+            const r = Math.min(40, Math.max(0, sourceCropPct.right));
+            const b = Math.min(40, Math.max(0, sourceCropPct.bottom));
+            const l = Math.min(40, Math.max(0, sourceCropPct.left));
+            return {
+                top: Math.round(vh * (t / 100)),
+                right: Math.round(vw * (r / 100)),
+                bottom: Math.round(vh * (b / 100)),
+                left: Math.round(vw * (l / 100))
+            };
+        }
+
         function applyStartDelayFromUI() {
             const input = document.getElementById('recordDelay');
             const v = input ? parseFloat(input.value) : 0;
@@ -1437,6 +1667,61 @@
             }
         }
 
+        function applyCameraFpsFromUI() {
+            const sel = document.getElementById('cameraFps');
+            const v = sel ? parseInt(sel.value, 10) : 60;
+            cameraFps = isFinite(v) ? v : 60;
+            if (currentMode === 'cam' && stream) {
+                startCamera();
+            }
+        }
+
+        function applyCameraResolutionFromUI() {
+            const sel = document.getElementById('cameraResolution');
+            const val = sel ? String(sel.value || '1280x720') : '1280x720';
+            const parts = val.split('x').map((n) => parseInt(n, 10));
+            const w = parts[0] || 1280;
+            const h = parts[1] || 720;
+            cameraWidth = w;
+            cameraHeight = h;
+            if (currentMode === 'cam' && stream) {
+                startCamera();
+            }
+        }
+
+        function setSelectValueOrAdd(select, value, label) {
+            if (!select) return;
+            const str = String(value);
+            const found = Array.from(select.options).some((opt) => opt.value === str);
+            if (!found) {
+                const opt = document.createElement('option');
+                opt.value = str;
+                opt.textContent = label || str;
+                select.prepend(opt);
+            }
+            select.value = str;
+        }
+
+        function applyPreviewFpsFromUI() {
+            const sel = document.getElementById('previewFps');
+            const v = sel ? parseInt(sel.value, 10) : 30;
+            previewFps = isFinite(v) ? v : 30;
+        }
+
+        function applyUseSourceResolutionFromUI() {
+            const chk = document.getElementById('useSourceResolution');
+            useSourceResolution = !!(chk && chk.checked);
+            applyPreviewAspect();
+            syncPreviewCanvasToMode(liveVideo);
+            syncLastOutputWidth();
+        }
+
+        function applySignalSourceFromUI() {
+            const sel = document.getElementById('signalSource');
+            signalSourceMode = sel ? sel.value : 'auto';
+            updateSignalInfo(true);
+        }
+
         function applyFormatFromUI() {
             const sel = document.getElementById('formatPref');
             preferredFormat = sel ? sel.value : 'auto';
@@ -1457,8 +1742,17 @@
 
         function chooseCanvasSizeByMode(sourceW, sourceH) {
             // Az álló/fekvő itt már TÉNYLEG a kimenet méretét állítja.
-            // auto: NDI-nél alapból 16:9 a stabil alap.
+            // Ha az "Eredeti felbontás" aktív, akkor a forrás méretéhez igazodunk.
             const mode = outputAspectMode;
+            const sw = sourceW || 1280;
+            const sh = sourceH || 720;
+
+            if (useSourceResolution) {
+                if (mode === 'portrait' && sw > sh) {
+                    return { w: sh, h: sw };
+                }
+                return { w: sw, h: sh };
+            }
 
             if (mode === 'portrait') {
                 // Álló kimenet (720x1280)
@@ -1473,21 +1767,24 @@
             const vw = videoEl.videoWidth || dw;
             const vh = videoEl.videoHeight || dh;
 
-            const srcAspect = vw / vh;
+            const crop = getSourceCropPx(videoEl);
+            const cvw = Math.max(1, vw - crop.left - crop.right);
+            const cvh = Math.max(1, vh - crop.top - crop.bottom);
+            const srcAspect = cvw / cvh;
             const dstAspect = dw / dh;
 
-            let sx = 0, sy = 0, sw = vw, sh = vh;
+            let sx = crop.left, sy = crop.top, sw = cvw, sh = cvh;
 
             if (srcAspect > dstAspect) {
-                sh = vh;
-                sw = Math.round(vh * dstAspect);
-                sx = Math.round((vw - sw) / 2);
-                sy = 0;
+                sh = cvh;
+                sw = Math.round(cvh * dstAspect);
+                sx = crop.left + Math.round((cvw - sw) / 2);
+                sy = crop.top;
             } else {
-                sw = vw;
-                sh = Math.round(vw / dstAspect);
-                sx = 0;
-                sy = Math.round((vh - sh) / 2);
+                sw = cvw;
+                sh = Math.round(cvw / dstAspect);
+                sx = crop.left;
+                sy = crop.top + Math.round((cvh - sh) / 2);
             }
 
             ctx2.drawImage(videoEl, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -1518,6 +1815,114 @@
             ctx2.restore();
         }
 
+        async function waitForFirstFrame(videoEl, timeoutMs = 1500) {
+            if (!videoEl) return;
+            if (videoEl.readyState >= 2 && videoEl.videoWidth && videoEl.videoHeight) return;
+
+            let done = false;
+            const fallback = new Promise((res) => {
+                setTimeout(() => {
+                    if (!done) res();
+                }, timeoutMs);
+            });
+
+            const byEvent = new Promise((res) => {
+                const onReady = () => {
+                    if (done) return;
+                    done = true;
+                    videoEl.removeEventListener('canplay', onReady);
+                    videoEl.removeEventListener('playing', onReady);
+                    res();
+                };
+                videoEl.addEventListener('canplay', onReady, { once: true });
+                videoEl.addEventListener('playing', onReady, { once: true });
+            });
+
+            const byFrame = (typeof videoEl.requestVideoFrameCallback === 'function')
+                ? new Promise((res) => {
+                    videoEl.requestVideoFrameCallback(() => {
+                        if (!done) {
+                            done = true;
+                            res();
+                        }
+                    });
+                })
+                : null;
+
+            await Promise.race([fallback, byEvent, byFrame].filter(Boolean));
+        }
+
+        function seekToTime(videoEl, timeSec, timeoutMs = 600) {
+            return new Promise((res) => {
+                if (!videoEl) return res();
+                const t = Math.max(0, timeSec || 0);
+                if (Math.abs((videoEl.currentTime || 0) - t) < 0.01) return res();
+                let done = false;
+                const onSeeked = () => {
+                    if (done) return;
+                    done = true;
+                    videoEl.removeEventListener('seeked', onSeeked);
+                    res();
+                };
+                const timer = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    videoEl.removeEventListener('seeked', onSeeked);
+                    res();
+                }, timeoutMs);
+                videoEl.addEventListener('seeked', onSeeked, { once: true });
+                try { videoEl.currentTime = t; } catch (_) { clearTimeout(timer); res(); }
+            });
+        }
+
+        async function safePlay(videoEl, timeoutMs = 1200) {
+            if (!videoEl) return false;
+            try {
+                const p = videoEl.play();
+                if (p && typeof p.then === 'function') {
+                    const ok = await Promise.race([
+                        p.then(() => true).catch(() => false),
+                        new Promise((res) => setTimeout(() => res(false), timeoutMs))
+                    ]);
+                    return ok === true;
+                } else {
+                    await new Promise((res) => setTimeout(res, 0));
+                    return true;
+                }
+            } catch (_) {
+                return false;
+            }
+        }
+
+        async function findTrimStartTime(videoEl, maxSec = 2, stepSec = 0.05) {
+            if (!videoEl) return 0;
+            const duration = isFinite(videoEl.duration) ? videoEl.duration : 0;
+            if (duration <= 0) return 0;
+            const limit = Math.min(maxSec, duration);
+            const tmp = document.createElement('canvas');
+            const tw = 64;
+            const th = 36;
+            tmp.width = tw;
+            tmp.height = th;
+            const tctx = tmp.getContext('2d');
+            for (let t = 0; t <= limit + 0.0001; t += stepSec) {
+                await seekToTime(videoEl, t);
+                try {
+                    tctx.drawImage(videoEl, 0, 0, tw, th);
+                    const data = tctx.getImageData(0, 0, tw, th).data;
+                    let sum = 0;
+                    for (let i = 0; i < data.length; i += 4) {
+                        sum += data[i] + data[i + 1] + data[i + 2];
+                    }
+                    const avg = sum / (data.length / 4);
+                    if (avg > 12) return t;
+                } catch (_) {
+                    return 0;
+                }
+            }
+            return 0;
+        }
+
         function buildProjectorThumb() {
             try {
                 return canvas.toDataURL('image/jpeg', 0.72);
@@ -1544,6 +1949,7 @@
 
         // --- ÉLŐ ELŐNÉZET CANVAS CIKLUS (kamera előnézet a canvas-on) ---
         let livePreviewRAF = 0;
+        let lastPreviewDrawMs = 0;
 
         function stopLivePreviewLoop() {
             if (livePreviewRAF) {
@@ -1586,7 +1992,12 @@
         function drawLivePreviewLoop() {
             stopLivePreviewLoop();
             const loop = () => {
-                drawLivePreviewOnce();
+                const now = performance.now();
+                const frameMs = previewFps > 0 ? (1000 / previewFps) : 33;
+                if (now - lastPreviewDrawMs >= frameMs) {
+                    lastPreviewDrawMs = now;
+                    drawLivePreviewOnce();
+                }
                 livePreviewRAF = requestAnimationFrame(loop);
             };
             livePreviewRAF = requestAnimationFrame(loop);
@@ -2007,8 +2418,10 @@
             try {
                 const constraints = {
                     video: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 },
+                        width: { ideal: cameraWidth },
+                        height: { ideal: cameraHeight },
+                        // A virtuális kamerák (NDI/OBS) gyakran nem támogatják a szigorú max értéket.
+                        frameRate: cameraFps ? { ideal: cameraFps } : undefined,
                         ...(id ? { deviceId: { exact: id } } : {})
                     },
                     audio: false
@@ -2038,6 +2451,44 @@
                 syncPreviewCanvasToMode(liveVideo);
                 applyLiveVideoTransform();
                 drawLivePreviewLoop();
+
+                const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+                const settings = track && track.getSettings ? track.getSettings() : null;
+                if (settings) {
+                    if (settings.width && settings.height) {
+                        cameraWidth = settings.width;
+                        cameraHeight = settings.height;
+                        setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (aktív)`);
+                    }
+                    if (settings.frameRate) {
+                        cameraFps = Math.round(settings.frameRate);
+                        setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (aktív)`);
+                    }
+                }
+
+                if (!autoMaxCameraApplied && track && track.getCapabilities) {
+                    const caps = track.getCapabilities();
+                    const maxW = caps.width && caps.width.max ? Math.round(caps.width.max) : 0;
+                    const maxH = caps.height && caps.height.max ? Math.round(caps.height.max) : 0;
+                    const maxF = caps.frameRate && caps.frameRate.max ? Math.round(caps.frameRate.max) : 0;
+                    const needRestart = (maxW && maxH && (maxW !== cameraWidth || maxH !== cameraHeight))
+                        || (maxF && maxF !== cameraFps);
+                    if (needRestart) {
+                        autoMaxCameraApplied = true;
+                        if (maxW && maxH) {
+                            cameraWidth = maxW;
+                            cameraHeight = maxH;
+                            setSelectValueOrAdd(document.getElementById('cameraResolution'), `${cameraWidth}x${cameraHeight}`, `${cameraWidth}x${cameraHeight} (max)`);
+                        }
+                        if (maxF) {
+                            cameraFps = maxF;
+                            setSelectValueOrAdd(document.getElementById('cameraFps'), String(cameraFps), `${cameraFps} fps (max)`);
+                        }
+                        await startCamera();
+                        return;
+                    }
+                    autoMaxCameraApplied = true;
+                }
 
                 statusBadge.innerText = 'KÉSZENLÉT';
                 statusBadge.style.color = '#03dac6';
@@ -2171,6 +2622,13 @@
             updateRampPresetButtons();
         }
 
+        function syncAutoRampStateFromUI() {
+            const chk = document.getElementById('autoRampMode');
+            if (!chk) return;
+            autoRampEnabled = !!chk.checked;
+            updateRampPresetButtons();
+        }
+
         function disableAutoRamp() {
             if (!autoRampEnabled) return;
             setAutoRampEnabled(false);
@@ -2229,12 +2687,17 @@
             const preset = getActiveRampPreset();
             const ratios = preset.ratios;
             const speeds = preset.speeds;
-            const raw = ratios.map(r => totalSec * r);
-            const durs = quantizeDurations(raw, totalSec, 0.01);
-            return durs.map((d, i) => ({ duration: d, speed: speeds[i] }));
+            const rawSource = ratios.map(r => totalSec * r);
+            const sourceDurs = quantizeDurations(rawSource, totalSec, 0.01);
+            return sourceDurs.map((src, i) => {
+                const spd = speeds[i] || 1;
+                const outDur = src / Math.max(0.05, spd);
+                return { duration: +outDur.toFixed(3), speed: spd };
+            });
         }
 
-        function getAutoRampDurationSec(fallback) {
+        function getSourceDurationSec(fallback) {
+            if (autoStopEnabled && autoStopSec > 0) return autoStopSec;
             if (recordedDurationSec && recordedDurationSec > 0) return recordedDurationSec;
             if (isFinite(fallback) && fallback > 0) return fallback;
             return 4;
@@ -2242,7 +2705,10 @@
 
         function applyAutoRampFromDuration() {
             if (!autoRampEnabled) return;
-            const total = getAutoRampDurationSec();
+            const fileDur = (rawPlayback && isFinite(rawPlayback.duration) && rawPlayback.duration > 0)
+                ? rawPlayback.duration
+                : undefined;
+            const total = getSourceDurationSec(fileDur);
             effects = buildAutoRamp(total);
             selectedEffectIndex = -1;
             renderList();
@@ -2562,20 +3028,30 @@
         }
 
         // --- 4. RÖGZÍTÉS (WEBCAM MÓD) ---
-        function startRecordingNow() {
+        async function startRecordingNow() {
             const btn = document.getElementById('startBtn');
+            syncAutoRampStateFromUI();
             statusBadge.innerText = "FELVÉTEL..."; statusBadge.style.color = "red";
             chunks = [];
             const pick1 = pickRecorderMime(preferredFormat);
+            try { await waitForFirstFrame(liveVideo, 2000); } catch (_) { }
             try {
-                mediaRecorder = new MediaRecorder(stream, { mimeType: pick1.mime, videoBitsPerSecond });
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: pick1.mime,
+                    videoBitsPerSecond,
+                    videoKeyFrameInterval: 1000
+                });
             } catch (e) {
-                console.error('[REC] MediaRecorder create failed:', e);
-                statusBadge.innerText = 'RÖGZÍTÉS HIBA';
-                statusBadge.style.color = 'red';
-                processText.innerText = 'A böngésző nem tud rögzíteni (MediaRecorder). Safari-ban ez gyakori. Próbáld Chrome-ban, vagy Safari Develop → Experimental Features alatt MediaRecorder/WebRTC opciókat engedélyezni.';
-                if (btn) btn.textContent = 'FELVÉTEL START';
-                return;
+                try {
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: pick1.mime, videoBitsPerSecond });
+                } catch (err) {
+                    console.error('[REC] MediaRecorder create failed:', err);
+                    statusBadge.innerText = 'RÖGZÍTÉS HIBA';
+                    statusBadge.style.color = 'red';
+                    processText.innerText = 'A böngésző nem tud rögzíteni (MediaRecorder). Safari-ban ez gyakori. Próbáld Chrome-ban, vagy Safari Develop → Experimental Features alatt MediaRecorder/WebRTC opciókat engedélyezni.';
+                    if (btn) btn.textContent = 'FELVÉTEL START';
+                    return;
+                }
             }
             mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) };
             mediaRecorder.onstop = () => {
@@ -2632,17 +3108,18 @@
                 if (btn) btn.textContent = 'FELVÉTEL STOP';
                 pendingStartTimer = setTimeout(() => {
                     pendingStartTimer = 0;
-                    startRecordingNow();
+                    void startRecordingNow();
                 }, Math.round(startDelaySec * 1000));
                 return;
             }
-            startRecordingNow();
+            void startRecordingNow();
         }
 
         // --- 5. FŐ FELDOLGOZÓ LOOP (KÖZÖS MINDKÉT MÓDHÓZ) ---
         async function startProcessingLoop() {
             isProcessing = true;
             isRecording = false;
+            syncAutoRampStateFromUI();
             statusBadge.innerText = "FELDOLGOZÁS..."; statusBadge.style.color = "yellow";
             progressBarContainer.style.display = 'block';
             const startBtn = document.getElementById('startBtn');
@@ -2675,12 +3152,26 @@
             canvas.height = chosen.h;
             setVideoContainerAspectFromCanvas();
 
-            if (autoRampEnabled) {
-                const durationSource = (isFinite(rawPlayback.duration) && rawPlayback.duration > 0)
+            const baseDuration = getSourceDurationSec(
+                (isFinite(rawPlayback.duration) && rawPlayback.duration > 0)
                     ? rawPlayback.duration
-                    : recordedDurationSec;
-                const total = getAutoRampDurationSec(durationSource);
+                    : undefined
+            );
+            let trimStartSec = 0;
+            if (baseDuration > 0) {
+                trimStartSec = await findTrimStartTime(rawPlayback, Math.min(2, baseDuration), 0.05);
+            }
+            const effectiveDuration = Math.max(0, baseDuration - trimStartSec);
+
+            if (autoRampEnabled) {
+                const total = getAutoRampDurationSec(effectiveDuration);
                 effects = buildAutoRamp(total);
+                selectedEffectIndex = -1;
+                renderList();
+                renderTimeline();
+            } else if (!effects.length) {
+                const total = effectiveDuration > 0 ? effectiveDuration : (baseDuration || 4);
+                effects = [{ duration: total, speed: 1 }];
                 selectedEffectIndex = -1;
                 renderList();
                 renderTimeline();
@@ -2740,10 +3231,21 @@
             rec.start();
             if (hasA) src.start(0);
 
-            await rawPlayback.play();
+            await seekToTime(rawPlayback, trimStartSec);
+            const playOk = await safePlay(rawPlayback, 2000);
+            if (!playOk) {
+                statusBadge.innerText = 'LEJÁTSZÁS HIBA';
+                statusBadge.style.color = 'red';
+                processText.innerText = 'A böngésző nem engedte a lejátszást (autoplay).';
+                progressBarContainer.style.display = 'none';
+                resetUI();
+                if (actx) actx.close();
+                return;
+            }
+            await waitForFirstFrame(rawPlayback, 2000);
             const boomerang = !!document.getElementById('boomerangMode')?.checked;
             const pingPong = !!document.getElementById('pingPongMode')?.checked;
-            let plan = effects.length > 0 ? effects : [{ duration: 100, speed: 1 }];
+            let plan = effects.length > 0 ? effects : [{ duration: 1, speed: 1 }];
             if (boomerang && !pingPong) plan = [...plan, ...plan];
             const reversePlan = pingPong ? [...plan].slice().reverse() : [];
 
@@ -2761,6 +3263,7 @@
                 rawPlayback.playbackRate = seg.speed;
                 const s = performance.now();
                 const d = seg.duration * 1000;
+                const frameMs = renderFps > 0 ? (1000 / renderFps) : 33;
                 while (performance.now() - s < d) {
                     drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
                     // Overlay: stabilan csak akkor rajzoljuk, ha betöltött; tartalék naturalWidth alapján
@@ -2802,9 +3305,9 @@
                     const segElapsed = (performance.now() - s) / 1000;
                     updateProgress(processedSec + segElapsed);
 
-                    await new Promise(r => setTimeout(r, 33));
+                    await new Promise(r => setTimeout(r, frameMs));
                     if (rawPlayback.ended) {
-                        if (boomerang && !pingPong) { rawPlayback.currentTime = 0; await rawPlayback.play(); }
+                        if (boomerang && !pingPong) { rawPlayback.currentTime = trimStartSec; await rawPlayback.play(); }
                         else break;
                     }
                 }
@@ -2815,11 +3318,13 @@
             if (pingPong) {
                 rawPlayback.pause();
                 const dur = isFinite(rawPlayback.duration) ? rawPlayback.duration : 0;
-                if (dur > 0) rawPlayback.currentTime = dur;
+                const reverseStart = Math.min(dur || 0, trimStartSec + effectiveDuration);
+                if (reverseStart > 0) rawPlayback.currentTime = reverseStart;
                 for (const seg of reversePlan) {
                     const s = performance.now();
                     const d = seg.duration * 1000;
-                    const step = 0.033 * (seg.speed || 1);
+                    const frameMs = renderFps > 0 ? (1000 / renderFps) : 33;
+                    const step = (frameMs / 1000) * (seg.speed || 1);
                     while (performance.now() - s < d) {
                         drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
                         if (overlayReady || (overlayImg && overlayImg.naturalWidth > 0 && overlayImg.naturalHeight > 0)) {
@@ -2857,9 +3362,9 @@
                         const segElapsed = (performance.now() - s) / 1000;
                         updateProgress(processedSec + segElapsed);
 
-                        rawPlayback.currentTime = Math.max(0, rawPlayback.currentTime - step);
-                        await new Promise(r => setTimeout(r, 33));
-                        if (rawPlayback.currentTime <= 0.01) break;
+                        rawPlayback.currentTime = Math.max(trimStartSec, rawPlayback.currentTime - step);
+                        await new Promise(r => setTimeout(r, frameMs));
+                        if (rawPlayback.currentTime <= trimStartSec + 0.01) break;
                     }
                     processedSec += seg.duration;
                     updateProgress(processedSec);
@@ -2901,7 +3406,13 @@
         applyStartDelayFromUI();
         applyAutoStopFromUI();
         applyQualityFromUI();
+        applyUseSourceResolutionFromUI();
+        applyCameraResolutionFromUI();
+        applyCameraFpsFromUI();
+        applyPreviewFpsFromUI();
         applyFormatFromUI();
+        applySignalSourceFromUI();
+        applySourceCropFromUI();
         applySourceRotateFromUI();
         applyLastOutputAspectFromMode();
         syncLastOutputWidth();
@@ -2918,6 +3429,10 @@
         });
         renderList();
 
+        if (signalInfoTimer) clearInterval(signalInfoTimer);
+        signalInfoTimer = setInterval(() => updateSignalInfo(false), 500);
+        updateSignalInfo(true);
+
         // Effektek felület inicializálás + élő frissítés
         (function initEffectsUI() {
             const tS = document.getElementById('effTimeSlider');
@@ -2933,18 +3448,20 @@
             const presetButtons = document.querySelectorAll('[data-ramp-preset]');
             if (chk) {
                 chk.addEventListener('change', () => {
+                    autoRampUserTouched = true;
                     setAutoRampEnabled(!!chk.checked);
                     if (autoRampEnabled) applyAutoRampFromDuration();
                 });
             }
             presetButtons.forEach((btn) => {
                 btn.addEventListener('click', () => {
+                    autoRampUserTouched = true;
                     const key = btn.getAttribute('data-ramp-preset');
                     setRampPreset(key);
                 });
             });
-            setAutoRampEnabled(true);
-            applyAutoRampFromDuration();
+            setAutoRampEnabled(false);
+            if (chk) chk.checked = false;
         })();
 
         (function initDateOverlayUI() {
@@ -2968,7 +3485,20 @@
 
         window.addEventListener('beforeunload', () => {
             stopLivePreviewLoop();
+            if (signalInfoTimer) {
+                clearInterval(signalInfoTimer);
+                signalInfoTimer = 0;
+            }
             try { if (stream) stream.getTracks().forEach(t => t.stop()); } catch (_) { }
+        });
+
+        window.addEventListener('pageshow', () => {
+            if (autoRampUserTouched) return;
+            const chk = document.getElementById('autoRampMode');
+            if (chk) {
+                chk.checked = false;
+                setAutoRampEnabled(false);
+            }
         });
 
         function updateUiScale() {
