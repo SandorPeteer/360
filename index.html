@@ -1944,6 +1944,12 @@
             return getViewportIsPortrait() ? 'portrait' : 'landscape';
         }
 
+        function syncBodyAspectMode() {
+            if (document && document.body) {
+                document.body.dataset.aspect = outputAspectMode;
+            }
+        }
+
         // Forrás forgatás (NDI/telefon álló módhoz)
         let sourceRotateDeg = 0; // 0 | 90 | 270
 
@@ -1955,6 +1961,7 @@
 
             if (outputAspectMode !== newMode) {
                 outputAspectMode = newMode;
+                syncBodyAspectMode();
                 console.log(`[AUTO-ORIENTATION] Váltás: ${outputAspectMode}`);
 
                 // Frissítsük az UI-t és a canvas-t
@@ -2343,6 +2350,7 @@
                     outputAspectMode = v;
                 }
             }
+            syncBodyAspectMode();
 
             // Előnézet keret frissítése
             applyPreviewAspect();
@@ -2591,11 +2599,15 @@
 
         async function enforceLockedCameraConstraints(track) {
             if (!track || !useSourceResolution || typeof track.applyConstraints !== 'function') return;
+            const caps = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : null;
+            const maxFps = caps && caps.frameRate && caps.frameRate.max ? caps.frameRate.max : 0;
             const wantPortrait = outputAspectMode === 'portrait';
             const lockWidth = wantPortrait ? 1080 : 1920;
             const lockHeight = wantPortrait ? 1920 : 1080;
             const targetAspect = wantPortrait ? (9 / 16) : (16 / 9);
             const attempts = [
+                ...(maxFps >= 60 ? [{ w: lockWidth, h: lockHeight, fps: 60, exact: true }] : []),
+                ...(maxFps >= 30 ? [{ w: lockWidth, h: lockHeight, fps: 30, exact: true }] : []),
                 { w: lockWidth, h: lockHeight, fps: 60, minFps: 30 },
                 { w: lockWidth, h: lockHeight, fps: 30, minFps: 24 },
                 { w: 1280, h: 720, fps: 60, minFps: 30 },
@@ -2607,7 +2619,11 @@
                 const c = { aspectRatio: targetAspect };
                 if (a.w) c.width = { ideal: a.w };
                 if (a.h) c.height = { ideal: a.h };
-                if (a.fps) c.frameRate = { ideal: a.fps, ...(a.minFps ? { min: a.minFps } : {}) };
+                if (a.fps && a.exact) {
+                    c.frameRate = { exact: a.fps };
+                } else if (a.fps) {
+                    c.frameRate = { ideal: a.fps, ...(a.minFps ? { min: a.minFps } : {}) };
+                }
                 try {
                     await track.applyConstraints(c);
                 } catch (_) {
@@ -2651,27 +2667,14 @@
             return Math.abs(r - targetAspect) <= tol;
         }
 
-        function getLockedCanvasSize(sourceW, sourceH) {
+        function getLockedCanvasSize() {
             const wantPortrait = outputAspectMode === 'portrait';
-            const targetAspect = wantPortrait ? (9 / 16) : (16 / 9);
-            const fallback = wantPortrait ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
-            if (!sourceW || !sourceH) return fallback;
-
-            let w = sourceW;
-            let h = Math.round(w / targetAspect);
-            if (h > sourceH) {
-                h = sourceH;
-                w = Math.round(h * targetAspect);
-            }
-            return {
-                w: Math.max(1, w),
-                h: Math.max(1, h)
-            };
+            return wantPortrait ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
         }
 
         function chooseCanvasSizeByMode(sourceW, sourceH) {
             if (currentMode === 'cam' && useSourceResolution) {
-                return getLockedCanvasSize(sourceW, sourceH);
+                return getLockedCanvasSize();
             }
             // NATÍV kamera felbontás használata
             const sw = sourceW || 1280;
@@ -3347,6 +3350,10 @@
             }
 
             const id = document.getElementById('camSelect').value;
+            if (isAutoOrientationEnabled) {
+                outputAspectMode = getViewportOrientationMode();
+                syncBodyAspectMode();
+            }
 
             // Előző stream leállítása (különben Safari/Chrome néha nem vált kamerát rendesen)
             try {
@@ -4418,6 +4425,13 @@
                 useWebCodecs = false;
                 console.log('[WebCodecs] MP4 muxer not loaded - using MediaRecorder fallback');
                 setEncoderBadge('SW CPU', 'cpu');
+                autoPreferMp4OnAndroid();
+                return;
+            }
+            if (isAndroidDevice() && getSupportedMp4Mime()) {
+                useWebCodecs = false;
+                console.log('[WebCodecs] Android prefers MediaRecorder H.264');
+                setEncoderBadge('MR READY', 'gpu');
                 autoPreferMp4OnAndroid();
                 return;
             }
