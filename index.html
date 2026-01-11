@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v1.6.2 • S.P.</title>
+    <title>360 selfie • v2.0.1 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -971,8 +971,8 @@
             
         }
 
-        /* iPad Safari álló mód / rövid viewport: alacsony magasságnál egymás alá rendezés */
-        @media (max-width: 1024px) and (max-height: 720px) {
+        /* DESKTOP ONLY - rövid viewport layout */
+        @media (min-width: 1101px) and (max-height: 720px) {
             :root {
                 --ui-scale: 1;
             }
@@ -1016,113 +1016,6 @@
 
             #videoContainer {
                 max-height: 32dvh;
-            }
-
-            #effectsList.scroll-area {
-                max-height: 28dvh;
-                height: 28dvh;
-            }
-        }
-
-        /* Telefon fekvő: 3 oszlop, mindhárom panel görgethető, gomb ragad */
-        @media (max-width: 900px) and (orientation: landscape) {
-            body {
-                overflow: hidden;
-            }
-
-            .container {
-                display: flex;
-                flex-direction: row;
-                height: 100dvh;
-                gap: 8px;
-                padding: 8px;
-            }
-
-            .left-panel,
-            .center-panel,
-            .right-panel {
-                height: 100%;
-                width: 33.33%;
-            }
-
-            .panel {
-                padding: 10px;
-                gap: 8px;
-                overflow-y: auto;
-            }
-
-            .app-header {
-                font-size: 16px;
-                margin-bottom: 8px;
-            }
-
-            #videoContainer {
-                max-height: 48dvh;
-            }
-
-            input,
-            select,
-            button {
-                padding: 7px;
-                font-size: 12px;
-            }
-
-            .btn-start {
-                height: 46px;
-                font-size: 15px;
-                position: sticky;
-                bottom: 8px;
-                z-index: 3;
-            }
-        }
-
-        /* Kisebb mobilon még kompaktabb */
-        @media (max-width: 700px) {
-            .container {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto auto auto;
-                gap: 10px;
-            }
-
-            .center-panel,
-            .left-panel,
-            .right-panel {
-                grid-column: 1;
-            }
-
-            .panel {
-                padding: 12px;
-                gap: 8px;
-            }
-
-            .app-header {
-                font-size: 18px;
-                margin-bottom: 10px;
-            }
-
-            h3 {
-                font-size: 11px;
-            }
-
-            label {
-                font-size: 10px;
-            }
-
-            input,
-            select,
-            button {
-                padding: 7px 9px;
-                font-size: 11.5px;
-            }
-
-            .btn-start {
-                height: 46px;
-                font-size: 15px;
-            }
-
-            #videoContainer {
-                max-height: 30dvh;
-                border-radius: 10px;
             }
 
             #effectsList.scroll-area {
@@ -1243,10 +1136,354 @@
         }
 
         /* Álló módban a videoContainer sokkal kisebb helyet foglaljon */
+
+        /* === HAMBURGER MENU === */
+        #menuToggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 999;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #menuToggle:hover {
+            transform: scale(1.05);
+        }
+
+        /* Hide hamburger when menu is open */
+        body.menu-open #menuToggle {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .menu-drawer {
+            position: fixed;
+            top: 0;
+            right: -100%;
+            width: min(400px, 90vw);
+            height: 100dvh;
+            background: var(--panel);
+            z-index: 1000;
+            transition: right 0.3s ease;
+            overflow-y: auto;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+        }
+
+        .menu-drawer.open {
+            right: 0;
+        }
+
+        .menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            background: var(--panel);
+            z-index: 10;
+        }
+
+        .menu-header h2 {
+            margin: 0;
+            color: var(--accent);
+            font-size: 18px;
+        }
+
+        .close-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .menu-content {
+            padding: 20px;
+        }
+
+        .menu-panel {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        /* REC/STOP icon button */
+        .rec-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #ff3b30;
+            border: 3px solid #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            transition: all 0.2s ease;
+        }
+
+        .rec-button:hover {
+            transform: scale(1.05);
+        }
+
+        .rec-button:active {
+            transform: scale(0.95);
+        }
+
+        /* REC icon - full circle */
+        .rec-button.rec-mode::before {
+            content: '';
+            width: 24px;
+            height: 24px;
+            background: #fff;
+            border-radius: 50%;
+        }
+
+        /* STOP icon - square */
+        .rec-button.stop-mode::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 3px;
+        }
+
+        /* Pulsing animation during recording */
+        .rec-button.recording {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 0 rgba(255, 59, 48, 0.7);
+            }
+            50% {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 15px rgba(255, 59, 48, 0);
+            }
+        }
+
+        /* Fullscreen layout for mobile/tablet (includes iPad 6th & 9th gen both orientations) */
+        @media (max-width: 1100px) {
+            body {
+                overflow: hidden;
+            }
+
+            .container {
+                display: block !important;
+                width: 100% !important;
+                height: 100dvh !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .left-panel, .right-panel {
+                display: none !important;
+            }
+
+            .center-panel {
+                width: 100% !important;
+                height: 100dvh !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                align-items: center !important;
+                overflow: visible !important;
+                background: var(--bg-0) !important;
+            }
+
+            .app-header {
+                display: none !important;
+            }
+
+            #videoContainer {
+                max-height: 75dvh !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                flex-shrink: 0 !important;
+            }
+
+            #videoContainer video,
+            #videoContainer canvas {
+                width: 100% !important;
+                height: auto !important;
+                max-height: 75dvh !important;
+            }
+
+            /* Status badge - move to left top on mobile */
+            #statusBadge {
+                top: 15px !important;
+                left: 15px !important;
+                right: auto !important;
+                font-size: 10px !important;
+                padding: 5px 10px !important;
+            }
+
+            /* Hamburger button - smaller on mobile */
+            #menuToggle {
+                width: 40px !important;
+                height: 40px !important;
+                font-size: 20px !important;
+                top: 15px !important;
+                right: 15px !important;
+            }
+
+            /* Progress bar - show during rendering */
+            #progressBarContainer {
+                position: fixed !important;
+                bottom: 100px !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                width: calc(100% - 40px) !important;
+                max-width: 600px !important;
+                z-index: 99 !important;
+            }
+
+            #processText {
+                position: fixed !important;
+                bottom: 75px !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                width: calc(100% - 40px) !important;
+                max-width: 600px !important;
+                text-align: center !important;
+                z-index: 99 !important;
+            }
+
+            /* Last output video - show after rendering, hide start button */
+            #lastOutput {
+                position: fixed !important;
+                bottom: 20px !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                width: calc(100% - 40px) !important;
+                max-width: 600px !important;
+                z-index: 101 !important;
+                margin: 0 !important;
+            }
+
+            /* Show mobile start button on mobile - icon style bottom right (symmetric with hamburger) */
+            .mobile-start-btn {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                position: fixed !important;
+                bottom: 15px !important;
+                right: 15px !important;
+                left: auto !important;
+                transform: none !important;
+                width: 40px !important;
+                height: 40px !important;
+                border-radius: 50% !important;
+                background: #ff3b30 !important;
+                border: 3px solid #fff !important;
+                font-size: 0 !important;
+                z-index: 100 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+            }
+
+            .mobile-start-btn:hover {
+                transform: scale(1.05) !important;
+            }
+
+            .mobile-start-btn:active {
+                transform: scale(0.95) !important;
+            }
+
+            /* REC icon - white circle inside (smaller for 40px button) */
+            .mobile-start-btn::before {
+                content: '';
+                display: block;
+                width: 16px;
+                height: 16px;
+                background: #fff;
+                border-radius: 50%;
+                transition: all 0.3s ease;
+            }
+
+            /* STOP mode - white square inside + pulsing */
+            .mobile-start-btn.recording::before {
+                width: 14px;
+                height: 14px;
+                border-radius: 2px;
+            }
+
+            .mobile-start-btn.recording {
+                animation: pulseMobile 1.2s ease-in-out infinite !important;
+            }
+
+            /* Menu content panels styling */
+            .menu-content .panel {
+                width: 100% !important;
+                padding: 15px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .menu-content h3 {
+                font-size: 14px !important;
+                margin-bottom: 10px !important;
+            }
+        }
+
+        /* Pulse animation for mobile recording button - scale breathing effect */
+        @keyframes pulseMobile {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 0 rgba(255, 59, 48, 0.9);
+            }
+            50% {
+                transform: scale(1.15);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.4), 0 0 0 8px rgba(255, 59, 48, 0);
+            }
+        }
+
+        @media (min-width: 1101px) {
+            #menuToggle {
+                display: none;
+            }
+        }
     </style>
 </head>
 
 <body>
+
+    <button id="menuToggle" onclick="toggleMenu()">☰</button>
+    <div id="menuDrawer" class="menu-drawer">
+        <div class="menu-header">
+            <h2>Beállítások</h2>
+            <button onclick="toggleMenu()" class="close-btn">✕</button>
+        </div>
+        <div class="menu-content" id="menuContent"></div>
+    </div>
 
     <div class="container">
         <!-- BAL PANEL -->
@@ -1341,6 +1578,9 @@
                 <div id="progressBar"></div>
             </div>
             <p id="processText" style="color:#aaa; font-size:11px; margin-top:5px; text-align:center; height:15px;"></p>
+
+            <!-- Mobile START/STOP button -->
+            <button id="mobileStartBtn" class="btn-start mobile-start-btn" onclick="handleMobileStart()" style="display:none;">FELVÉTEL START</button>
         </div>
 
         <!-- JOBB PANEL -->
@@ -3516,6 +3756,16 @@
             isRecording = true;
             recordStartMs = performance.now();
             if (btn) btn.textContent = 'FELVÉTEL STOP';
+
+            // Lower preview FPS during recording to prioritize recording quality
+            const originalPreviewFps = previewFps;
+            previewFps = 2; // 2 FPS during recording
+
+            // Restore preview FPS when recording stops
+            mediaRecorder.addEventListener('stop', () => {
+                previewFps = originalPreviewFps;
+            }, { once: true });
+
             if (autoStopEnabled && autoStopSec > 0) {
                 autoStopTimer = setTimeout(() => {
                     if (isRecording) initiateCamSequence();
@@ -3839,6 +4089,9 @@
         applySourceRotateFromUI();
         applyLastOutputAspectFromMode();
         syncLastOutputWidth();
+
+        // Initialize mobile button sync
+        setTimeout(syncMobileButton, 100);
         function updateUiScale() {
             document.documentElement.style.setProperty('--ui-scale', '1');
         }
@@ -3938,6 +4191,176 @@
 
         // updateUiScale és event listener inicializálás már korábban megtörtént
         updateUiScale();
+
+        // === MOBILE START BUTTON ===
+        function handleMobileStart() {
+            // Sync with desktop button - use the same function
+            const desktopBtn = document.getElementById('startBtn');
+            if (desktopBtn) {
+                desktopBtn.click();
+                // Force sync after click with delay to catch state change
+                setTimeout(syncMobileButton, 100);
+            }
+        }
+
+        // Sync mobile button state with desktop button
+        function syncMobileButton() {
+            const desktopBtn = document.getElementById('startBtn');
+            const mobileBtn = document.getElementById('mobileStartBtn');
+            if (desktopBtn && mobileBtn) {
+                mobileBtn.disabled = desktopBtn.disabled;
+                const btnText = desktopBtn.textContent || '';
+                const isRec = btnText.includes('STOP');
+
+                if (isRec) {
+                    mobileBtn.classList.add('recording');
+                } else {
+                    mobileBtn.classList.remove('recording');
+                }
+            }
+        }
+
+        // Watch for changes to desktop button
+        const desktopBtnObserver = new MutationObserver(() => {
+            syncMobileButton();
+        });
+        const desktopStartBtn = document.getElementById('startBtn');
+        if (desktopStartBtn) {
+            desktopBtnObserver.observe(desktopStartBtn, {
+                childList: true,
+                characterData: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['disabled']
+            });
+        }
+
+        // Fallback: watch for global isRecording changes
+        setInterval(() => {
+            const mobileBtn = document.getElementById('mobileStartBtn');
+            if (mobileBtn && typeof isRecording !== 'undefined') {
+                if (isRecording && !mobileBtn.classList.contains('recording')) {
+                    mobileBtn.classList.add('recording');
+                } else if (!isRecording && mobileBtn.classList.contains('recording')) {
+                    mobileBtn.classList.remove('recording');
+                }
+            }
+        }, 500);
+
+        // === HAMBURGER MENU ===
+        function toggleMenu() {
+            const drawer = document.getElementById('menuDrawer');
+            const isOpen = drawer.classList.contains('open');
+
+            if (!isOpen) {
+                // Menü tartalom betöltése első megnyitáskor
+                const content = document.getElementById('menuContent');
+                if (!content.innerHTML) {
+                    const left = document.querySelector('.left-panel').cloneNode(true);
+                    const right = document.querySelector('.right-panel').cloneNode(true);
+
+                    // Force display for cloned panels
+                    left.style.display = 'block';
+                    left.style.visibility = 'visible';
+                    left.style.opacity = '1';
+                    left.classList.remove('left-panel');
+                    left.classList.add('menu-panel');
+
+                    right.style.display = 'block';
+                    right.style.visibility = 'visible';
+                    right.style.opacity = '1';
+                    right.classList.remove('right-panel');
+                    right.classList.add('menu-panel');
+
+                    content.appendChild(left);
+                    content.appendChild(right);
+
+                    // Re-attach event handlers for cloned inputs
+                    rebindMenuEvents();
+                }
+                document.body.classList.add('menu-open');
+            } else {
+                document.body.classList.remove('menu-open');
+            }
+
+            drawer.classList.toggle('open');
+        }
+
+        function rebindMenuEvents() {
+            // Re-attach all onchange/oninput events for cloned elements
+            const menuContent = document.getElementById('menuContent');
+
+            // Brand title
+            const brandInput = menuContent.querySelector('#brandTitleInput');
+            if (brandInput) brandInput.oninput = updateBranding;
+
+            // Logo
+            const logoInput = menuContent.querySelector('#logoInput');
+            if (logoInput) logoInput.onchange = updateLogo;
+
+            // Overlay file
+            const overlayInput = menuContent.querySelector('#overlayFile');
+            if (overlayInput) overlayInput.onchange = function() { loadOverlay(this); };
+
+            // Clear overlay button
+            const clearBtn = menuContent.querySelector('.btn-clear');
+            if (clearBtn) clearBtn.onclick = clearOverlay;
+
+            // Date overlay checkbox
+            const dateCheck = menuContent.querySelector('#dateOverlay');
+            if (dateCheck) dateCheck.onchange = updateDateOverlayPreview;
+
+            // Date position
+            const datePos = menuContent.querySelector('#dateOverlayPos');
+            if (datePos) datePos.onchange = updateDateOverlayPreview;
+
+            // Date offsets
+            const offsetX = menuContent.querySelector('#dateOverlayOffsetX');
+            if (offsetX) offsetX.oninput = updateDateOverlayPreview;
+
+            const offsetY = menuContent.querySelector('#dateOverlayOffsetY');
+            if (offsetY) offsetY.oninput = updateDateOverlayPreview;
+
+            // Mode buttons
+            const btnCam = menuContent.querySelector('#btnModeCam');
+            if (btnCam) btnCam.onclick = () => setMode('cam');
+
+            const btnFile = menuContent.querySelector('#btnModeFile');
+            if (btnFile) btnFile.onclick = () => setMode('file');
+
+            // Camera select
+            const camSelect = menuContent.querySelector('#camSelect');
+            if (camSelect) camSelect.onchange = startCamera;
+
+            // Output aspect (if exists)
+            const outputAspect = menuContent.querySelector('#outputAspect');
+            if (outputAspect) outputAspect.onchange = applyOutputAspectFromUI;
+
+            // Overlay fit
+            const overlayFit = menuContent.querySelector('#overlayFit');
+            if (overlayFit) overlayFit.onchange = applyPreviewAspect;
+
+            // Projector button
+            const projBtn = menuContent.querySelector('.btn-projector');
+            if (projBtn) projBtn.onclick = openProjectorWindow;
+
+            // All other buttons and inputs - generic re-binding
+            menuContent.querySelectorAll('button, input, select').forEach(el => {
+                const onclick = el.getAttribute('onclick');
+                const onchange = el.getAttribute('onchange');
+                const oninput = el.getAttribute('oninput');
+
+                if (onclick) {
+                    el.onclick = function() { eval(onclick); };
+                }
+                if (onchange) {
+                    el.onchange = function() { eval(onchange); };
+                }
+                if (oninput) {
+                    el.oninput = function() { eval(oninput); };
+                }
+            });
+        }
     </script>
 </body>
 
