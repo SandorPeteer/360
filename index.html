@@ -1932,6 +1932,18 @@
             return isMobile || isTouch;
         }
 
+        function getViewportIsPortrait() {
+            const vw = window.innerWidth || 0;
+            const vh = window.innerHeight || 0;
+            if (vw && vh) return vh >= vw;
+            if (window.matchMedia) return window.matchMedia('(orientation: portrait)').matches;
+            return true;
+        }
+
+        function getViewportOrientationMode() {
+            return getViewportIsPortrait() ? 'portrait' : 'landscape';
+        }
+
         // Forrás forgatás (NDI/telefon álló módhoz)
         let sourceRotateDeg = 0; // 0 | 90 | 270
 
@@ -1939,8 +1951,7 @@
         function updateOrientationFromViewport() {
             if (!isAutoOrientationEnabled) return;
 
-            const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
-            const newMode = isViewportPortrait ? 'portrait' : 'landscape';
+            const newMode = getViewportOrientationMode();
 
             if (outputAspectMode !== newMode) {
                 outputAspectMode = newMode;
@@ -2011,7 +2022,7 @@
         
         // Helper: Max VH számítás módhoz
         function getMaxVhForMode(portrait, viewportWidth, viewportHeight) {
-            const isViewportPortrait = window.matchMedia('(orientation: portrait)').matches;
+            const isViewportPortrait = getViewportIsPortrait();
 
             if (portrait) {
                 // Álló kimenet (9:16)
@@ -2578,6 +2589,38 @@
             }
         }
 
+        async function enforceLockedCameraConstraints(track) {
+            if (!track || !useSourceResolution || typeof track.applyConstraints !== 'function') return;
+            const wantPortrait = outputAspectMode === 'portrait';
+            const lockWidth = wantPortrait ? 1080 : 1920;
+            const lockHeight = wantPortrait ? 1920 : 1080;
+            const targetAspect = wantPortrait ? (9 / 16) : (16 / 9);
+            const attempts = [
+                { w: lockWidth, h: lockHeight, fps: 60, minFps: 30 },
+                { w: lockWidth, h: lockHeight, fps: 30, minFps: 24 },
+                { w: 1280, h: 720, fps: 60, minFps: 30 },
+                { w: 1280, h: 720, fps: 30, minFps: 24 },
+                { w: 0, h: 0, fps: 30, minFps: 0 }
+            ];
+
+            for (const a of attempts) {
+                const c = { aspectRatio: targetAspect };
+                if (a.w) c.width = { ideal: a.w };
+                if (a.h) c.height = { ideal: a.h };
+                if (a.fps) c.frameRate = { ideal: a.fps, ...(a.minFps ? { min: a.minFps } : {}) };
+                try {
+                    await track.applyConstraints(c);
+                } catch (_) {
+                    continue;
+                }
+                const s = track.getSettings ? track.getSettings() : null;
+                if (!s) break;
+                const ratioOk = isAspectClose(s.width, s.height, targetAspect, 0.04);
+                const fpsOk = s.frameRate ? s.frameRate >= (a.minFps || 0) : true;
+                if (ratioOk && fpsOk) break;
+            }
+        }
+
         function applySignalSourceFromUI() {
             const sel = document.getElementById('signalSource');
             signalSourceMode = sel ? sel.value : 'auto';
@@ -2602,7 +2645,34 @@
             }
         }
 
+        function isAspectClose(w, h, targetAspect, tol = 0.04) {
+            if (!w || !h) return false;
+            const r = w / h;
+            return Math.abs(r - targetAspect) <= tol;
+        }
+
+        function getLockedCanvasSize(sourceW, sourceH) {
+            const wantPortrait = outputAspectMode === 'portrait';
+            const targetAspect = wantPortrait ? (9 / 16) : (16 / 9);
+            const fallback = wantPortrait ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+            if (!sourceW || !sourceH) return fallback;
+
+            let w = sourceW;
+            let h = Math.round(w / targetAspect);
+            if (h > sourceH) {
+                h = sourceH;
+                w = Math.round(h * targetAspect);
+            }
+            return {
+                w: Math.max(1, w),
+                h: Math.max(1, h)
+            };
+        }
+
         function chooseCanvasSizeByMode(sourceW, sourceH) {
+            if (currentMode === 'cam' && useSourceResolution) {
+                return getLockedCanvasSize(sourceW, sourceH);
+            }
             // NATÍV kamera felbontás használata
             const sw = sourceW || 1280;
             const sh = sourceH || 720;
@@ -3330,6 +3400,9 @@
                 drawLivePreviewLoop();
 
                 const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+                if (track && useNative) {
+                    await enforceLockedCameraConstraints(track);
+                }
                 if (track && !userCameraChoiceTouched && !useSourceResolution && !autoCameraTuned) {
                     await autoTuneCameraForBestFps(track);
                     autoCameraTuned = true;
@@ -4622,6 +4695,9 @@
 
         function handleOrientationOrResize() {
             updateUiScale();
+            if (isAutoOrientationEnabled) {
+                updateOrientationFromViewport();
+            }
             applyPreviewAspect();
             if (currentMode === 'cam') {
                 syncPreviewCanvasToMode(liveVideo);
