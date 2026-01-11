@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 selfie • v2.0.1 • S.P.</title>
+    <title>360 selfie • v2.1.0 • S.P.</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
@@ -444,19 +444,53 @@
             object-fit: cover;
         }
 
-        #statusBadge {
+        #badgeRow {
             position: absolute;
             top: 15px;
             right: 15px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            z-index: 5;
+        }
+
+        #statusBadge {
             padding: 6px 12px;
             background: rgba(0, 0, 0, 0.8);
             border-radius: 999px;
             font-size: 11px;
             color: var(--accent);
-            z-index: 5;
             border: 1px solid var(--border);
             text-transform: uppercase;
             font-weight: bold;
+        }
+
+        /* Encoder mode badge - shows GPU or CPU mode */
+        #encoderBadge {
+            padding: 4px 10px;
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 999px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            border: 1px solid;
+            display: none;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        #encoderBadge.gpu {
+            color: #00ff00;
+            border-color: #00ff00;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+            display: block;
+        }
+
+        #encoderBadge.cpu {
+            color: #ffaa00;
+            border-color: #ffaa00;
+            box-shadow: 0 0 10px rgba(255, 170, 0, 0.3);
+            display: block;
         }
 
         #progressBarContainer {
@@ -1338,12 +1372,21 @@
             }
 
             /* Status badge - move to left top on mobile */
-            #statusBadge {
+            #badgeRow {
                 top: 15px !important;
                 left: 15px !important;
                 right: auto !important;
+                gap: 6px !important;
+            }
+
+            #statusBadge {
                 font-size: 10px !important;
                 padding: 5px 10px !important;
+            }
+
+            #encoderBadge {
+                font-size: 9px !important;
+                padding: 3px 8px !important;
             }
 
             /* Hamburger button - smaller on mobile */
@@ -1472,6 +1515,8 @@
             }
         }
     </style>
+    <!-- MP4 Muxer for WebCodecs -->
+    <script src="https://unpkg.com/mp4-muxer@5.1.2/build/mp4-muxer.js"></script>
 </head>
 
 <body>
@@ -1487,7 +1532,7 @@
 
     <div class="container">
         <!-- BAL PANEL -->
-        <div class="panel left-panel">
+        <div class="panel left-panel" id="leftPanel">
             <h3>1. Branding & Kijelző</h3>
             <label>Esemény Neve</label>
             <input type="text" id="brandTitleInput" placeholder="Pl: Molnár Esküvő" oninput="updateBranding()">
@@ -1544,7 +1589,10 @@
                 <video id="rawPlayback" style="display:none;" muted playsinline></video>
                 <canvas id="renderCanvas" width="1280" height="720" style="display:none;"></canvas>
                 <img id="overlayImg" style="display:none;">
-                <div id="statusBadge">KÉSZENLÉT</div>
+                <div id="badgeRow">
+                    <div id="statusBadge">KÉSZENLÉT</div>
+                    <div id="encoderBadge">HW GPU</div>
+                </div>
 
             </div>
 
@@ -1584,7 +1632,7 @@
         </div>
 
         <!-- JOBB PANEL -->
-        <div class="panel right-panel">
+        <div class="panel right-panel" id="rightPanel">
             <h3>3. Működési Mód</h3>
             <div class="mode-switch">
                 <button class="mode-btn active" id="btnModeCam" onclick="setMode('cam')">Kamera indítás</button>
@@ -1602,7 +1650,7 @@
                 </div>
 
                 <div style="padding: 8px; background: rgba(32, 211, 193, 0.1); border: 1px solid rgba(32, 211, 193, 0.3); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">
-                    ℹ️ A kamera natív felbontása, képaránya és FPS értéke kerül használatra a legjobb minőség érdekében
+                    ℹ️ Alap cél: FULL HD (16:9 / 9:16) 60 fps, ha nem megy, automatikusan 30 fps
                 </div>
 
                 <label>Overlay illesztés</label>
@@ -1698,7 +1746,7 @@
 
                         <label style="display:flex; align-items:center; gap:8px;">
                             <input type="checkbox" id="useSourceResolution" style="width:auto;" onchange="applyUseSourceResolutionFromUI()" checked>
-                            Eredeti felbontás (max)
+                            FHD lock (16:9/9:16) • 60 fps
                         </label>
 
                         <label>Preferált formátum</label>
@@ -1825,8 +1873,10 @@
         let preferredFormat = 'auto';
         let cameraFps = 60;
         let previewFps = 30;
-        let cameraWidth = 1280;
-        let cameraHeight = 720;
+        let originalPreviewFps = 30; // Store original preview FPS during recording
+        let previewFpsManual = 30;
+        let cameraWidth = 1920;
+        let cameraHeight = 1080;
         let useSourceResolution = true;
         const previewMaxEdge = 1280;
         let autoMaxCameraApplied = false;
@@ -1838,6 +1888,12 @@
         let pendingStartTimer = 0;
         let recordStartMs = 0;
         let recordedDurationSec = 0;
+
+        // WebCodecs support
+        let useWebCodecs = false;
+        let webCodecsEncoder = null;
+        let webCodecsFrameCounter = 0;
+        let webCodecsChunks = [];
         let startDelaySec = 0;
         let autoStopEnabled = false;
         let autoStopSec = 10;
@@ -1894,6 +1950,9 @@
                 applyPreviewAspect();
                 if (currentMode === 'cam') {
                     syncPreviewCanvasToMode(liveVideo);
+                    if (useSourceResolution && stream) {
+                        startCamera();
+                    }
                 }
                 applyLiveVideoTransform();
                 updateDateOverlayPreview();
@@ -2128,7 +2187,41 @@
                 targetFpsText = renderFps ? `${renderFps} fps` : '-';
             }
             if (fpsTargetEl) fpsTargetEl.textContent = targetFpsText;
-            if (autoEl) autoEl.textContent = autoCameraTuned ? 'AUTO OK' : '-';
+            if (autoEl) {
+                autoEl.textContent = useSourceResolution ? 'LOCK FHD' : (autoCameraTuned ? 'AUTO OK' : '-');
+            }
+        }
+
+        function fmtMbps(bps) {
+            const n = Number(bps);
+            if (!isFinite(n) || n <= 0) return '';
+            const mbps = n / 1000000;
+            return `${mbps % 1 === 0 ? mbps.toFixed(0) : mbps.toFixed(1)}M`;
+        }
+
+        function setEncoderBadge(text, mode) {
+            const badge = document.getElementById('encoderBadge');
+            if (!badge) return;
+            if (!text || !mode) {
+                badge.className = '';
+                badge.textContent = '';
+                return;
+            }
+            badge.textContent = text;
+            badge.className = mode;
+        }
+
+        function buildEncoderBadgeText(cfg, modeLabel) {
+            if (!cfg) return modeLabel || '';
+            const codec = cfg.codec || 'avc1';
+            const w = cfg.width || 0;
+            const h = cfg.height || 0;
+            const fr = cfg.framerate || cfg.frameRate || 0;
+            const br = cfg.bitrate || 0;
+            const parts = [modeLabel, codec];
+            if (w && h && fr) parts.push(`${w}x${h}@${Math.round(fr)}fps`);
+            if (br) parts.push(fmtMbps(br));
+            return parts.filter(Boolean).join(' ');
         }
 
         // Orientáció UI inicializálás (mobil=auto, desktop=manuális)
@@ -2183,6 +2276,9 @@
             // Ha kamerán vagyunk, igazítsuk az előnézeti canvas méretét
             if (currentMode === 'cam') {
                 syncPreviewCanvasToMode(liveVideo);
+                if (useSourceResolution && stream) {
+                    startCamera();
+                }
             }
 
             // A videó transzform újraszámolása
@@ -2309,14 +2405,26 @@
         function applyPreviewFpsFromUI() {
             const sel = document.getElementById('previewFps');
             const v = sel ? parseInt(sel.value, 10) : 30;
-            previewFps = isFinite(v) ? v : 30;
+            previewFpsManual = isFinite(v) ? v : 30;
+            if (!useSourceResolution) {
+                previewFps = previewFpsManual;
+            }
         }
 
         function applyUseSourceResolutionFromUI() {
             const chk = document.getElementById('useSourceResolution');
             useSourceResolution = !!(chk && chk.checked);
+            const resSel = document.getElementById('cameraResolution');
+            const fpsSel = document.getElementById('cameraFps');
+            const previewSel = document.getElementById('previewFps');
+            if (resSel) resSel.disabled = useSourceResolution;
+            if (fpsSel) fpsSel.disabled = useSourceResolution;
+            if (previewSel) previewSel.disabled = useSourceResolution;
             if (useSourceResolution) {
                 autoCameraTuned = false;
+            } else {
+                previewFps = previewFpsManual;
+                if (previewSel) previewSel.value = String(previewFpsManual);
             }
             applyPreviewAspect();
             syncPreviewCanvasToMode(liveVideo);
@@ -2324,6 +2432,18 @@
             if (currentMode === 'cam' && stream) {
                 startCamera();
             }
+        }
+
+        function applyPreviewFpsLockFromSettings(settings) {
+            if (!useSourceResolution) return;
+            const baseFps = settings && settings.frameRate ? settings.frameRate : (cameraFps || 60);
+            const autoFps = Math.max(1, Math.round(baseFps / 5));
+            previewFps = autoFps;
+            setSelectValueOrAdd(
+                document.getElementById('previewFps'),
+                String(autoFps),
+                `${autoFps} fps (lock)`
+            );
         }
 
         function getAspectCandidates(targetAspect, maxW, maxH) {
@@ -3099,16 +3219,20 @@
             stream = null;
 
             try {
-                // Kamera beállítások: natív max, vagy UI szerinti cél
+                // Kamera beállítások: FHD lock (16:9/9:16) 60fps, vagy UI szerinti cél
                 const useNative = !!useSourceResolution;
-                const targetWidth = cameraWidth || 1280;
-                const targetHeight = cameraHeight || 720;
-                const targetFps = cameraFps || 30;
+                const targetWidth = cameraWidth || 1920;
+                const targetHeight = cameraHeight || 1080;
+                const targetFps = cameraFps || 60;
+                const wantPortrait = outputAspectMode === 'portrait';
+                const lockWidth = wantPortrait ? 1080 : 1920;
+                const lockHeight = wantPortrait ? 1920 : 1080;
                 const constraints = {
                     video: {
-                        width: useNative ? { ideal: 4096 } : { ideal: targetWidth },
-                        height: useNative ? { ideal: 4096 } : { ideal: targetHeight },
-                        frameRate: useNative ? { ideal: 60 } : { ideal: targetFps },
+                        width: useNative ? { ideal: lockWidth } : { ideal: targetWidth },
+                        height: useNative ? { ideal: lockHeight } : { ideal: targetHeight },
+                        frameRate: useNative ? { ideal: 60, min: 30 } : { ideal: targetFps },
+                        aspectRatio: useNative ? (wantPortrait ? 9 / 16 : 16 / 9) : undefined,
                         ...(id ? { deviceId: { exact: id } } : {})
                     },
                     audio: false
@@ -3140,7 +3264,7 @@
                 drawLivePreviewLoop();
 
                 const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
-                if (track && !userCameraChoiceTouched && useSourceResolution && !autoCameraTuned) {
+                if (track && !userCameraChoiceTouched && !useSourceResolution && !autoCameraTuned) {
                     await autoTuneCameraForBestFps(track);
                     autoCameraTuned = true;
                 }
@@ -3154,7 +3278,7 @@
                             setSelectValueOrAdd(
                                 document.getElementById('cameraResolution'),
                                 `${cameraWidth}x${cameraHeight}`,
-                                `${cameraWidth}x${cameraHeight} (auto)`
+                                `${cameraWidth}x${cameraHeight} (lock)`
                             );
                         }
                     }
@@ -3164,10 +3288,13 @@
                             setSelectValueOrAdd(
                                 document.getElementById('cameraFps'),
                                 String(cameraFps),
-                                `${cameraFps} fps (auto)`
+                                `${cameraFps} fps (lock)`
                             );
                         }
                     }
+                }
+                if (useNative) {
+                    applyPreviewFpsLockFromSettings(settings);
                 }
                 const autoEl = document.getElementById('autoTuneInfo');
                 if (autoEl) {
@@ -3722,8 +3849,46 @@
             syncAutoRampStateFromUI();
             statusBadge.innerText = "FELVÉTEL..."; statusBadge.style.color = "red";
             chunks = [];
-            const pick1 = pickRecorderMime(preferredFormat);
             try { await waitForFirstFrame(liveVideo, 2000); } catch (_) { }
+
+            // Lower preview FPS during recording to prioritize recording quality
+            originalPreviewFps = previewFps;
+            previewFps = 2;
+
+            // === USE WEBCODECS IF AVAILABLE ===
+            if (useWebCodecs) {
+                try {
+                    console.log('[REC] Using WebCodecs H.264 hardware encoding');
+                    webCodecsEncoder = new WebCodecsRecorder(stream, { videoBitsPerSecond });
+                    await webCodecsEncoder.start();
+                    if (webCodecsEncoder && webCodecsEncoder.chosenConfig) {
+                        setEncoderBadge(buildEncoderBadgeText(webCodecsEncoder.chosenConfig, 'HW'), 'gpu');
+                    } else {
+                        setEncoderBadge('HW H.264', 'gpu');
+                    }
+
+                    isRecording = true;
+                    recordStartMs = performance.now();
+                    if (btn) btn.textContent = 'FELVÉTEL STOP';
+                    statusBadge.innerText = "FELVÉTEL (GPU)";
+                    statusBadge.style.color = "#00ff00";
+
+                    if (autoStopEnabled && autoStopSec > 0) {
+                        autoStopTimer = setTimeout(() => {
+                            if (isRecording) initiateCamSequence();
+                        }, autoStopSec * 1000);
+                    }
+                    return; // Exit early, WebCodecs handles recording
+                } catch (e) {
+                    console.error('[WebCodecs] Start failed, falling back to MediaRecorder:', e);
+                    useWebCodecs = false; // Disable for this session
+                    webCodecsEncoder = null;
+                    setEncoderBadge('SW MediaRecorder', 'cpu');
+                }
+            }
+
+            // === FALLBACK: MEDIARECORDER ===
+            const pick1 = pickRecorderMime(preferredFormat);
             try {
                 mediaRecorder = new MediaRecorder(stream, {
                     mimeType: pick1.mime,
@@ -3739,6 +3904,7 @@
                     statusBadge.style.color = 'red';
                     processText.innerText = 'A böngésző nem tud rögzíteni (MediaRecorder). Safari-ban ez gyakori. Próbáld Chrome-ban, vagy Safari Develop → Experimental Features alatt MediaRecorder/WebRTC opciókat engedélyezni.';
                     if (btn) btn.textContent = 'FELVÉTEL START';
+                    previewFps = originalPreviewFps;
                     return;
                 }
             }
@@ -3751,20 +3917,13 @@
                 rawVideoBlob = new Blob(chunks, { type: pick2.mime });
                 setRawPlaybackSource(rawVideoBlob);
                 startProcessingLoop();
+                previewFps = originalPreviewFps;
             };
             try { mediaRecorder.start(); } catch (_) { }
             isRecording = true;
             recordStartMs = performance.now();
             if (btn) btn.textContent = 'FELVÉTEL STOP';
-
-            // Lower preview FPS during recording to prioritize recording quality
-            const originalPreviewFps = previewFps;
-            previewFps = 2; // 2 FPS during recording
-
-            // Restore preview FPS when recording stops
-            mediaRecorder.addEventListener('stop', () => {
-                previewFps = originalPreviewFps;
-            }, { once: true });
+            setEncoderBadge(`SW ${pick1.mime}`, 'cpu');
 
             if (autoStopEnabled && autoStopSec > 0) {
                 autoStopTimer = setTimeout(() => {
@@ -3773,7 +3932,7 @@
             }
         }
 
-        function initiateCamSequence() {
+        async function initiateCamSequence() {
             if (!stream) {
                 console.warn('[CAM] No active stream. Trying to start camera...');
                 statusBadge.innerText = 'KAMERA INDÍTÁS...';
@@ -3795,7 +3954,28 @@
                 statusBadge.innerText = "MENTÉS...";
                 statusBadge.style.color = "yellow";
                 if (autoStopTimer) { clearTimeout(autoStopTimer); autoStopTimer = 0; }
-                try { mediaRecorder && mediaRecorder.stop(); } catch (_) { }
+
+                // Stop WebCodecs or MediaRecorder
+                if (webCodecsEncoder) {
+                    try {
+                        const blob = await webCodecsEncoder.stop();
+                        recordedDurationSec = Math.max(0, (performance.now() - recordStartMs) / 1000);
+                        if (autoRampEnabled) applyAutoRampFromDuration();
+
+                        // Set the recorded blob as raw video
+                        rawVideoBlob = blob;
+                        setRawPlaybackSource(rawVideoBlob);
+                        startProcessingLoop();
+
+                        webCodecsEncoder = null;
+                        previewFps = originalPreviewFps || 30;
+                    } catch (e) {
+                        console.error('[WebCodecs] Stop error:', e);
+                    }
+                } else {
+                    try { mediaRecorder && mediaRecorder.stop(); } catch (_) { }
+                }
+
                 isRecording = false;
                 if (btn) btn.textContent = 'FELVÉTEL START';
                 return;
@@ -3892,6 +4072,7 @@
                 trimStartSec = await findTrimStartTime(rawPlayback, Math.min(2, baseDuration), 0.05);
             }
             const effectiveDuration = Math.max(0, baseDuration - trimStartSec);
+            const endTime = trimStartSec + effectiveDuration;
 
             if (autoRampEnabled) {
                 const total = getAutoRampDurationSec(effectiveDuration);
@@ -4006,9 +4187,14 @@
                     updateProgress(processedSec + segElapsed);
 
                     await new Promise(r => setTimeout(r, frameMs));
-                    if (rawPlayback.ended) {
-                        if (boomerang && !pingPong) { rawPlayback.currentTime = trimStartSec; await rawPlayback.play(); }
-                        else break;
+                    if (rawPlayback.ended || (endTime > 0 && rawPlayback.currentTime >= endTime - 0.01)) {
+                        if (boomerang && !pingPong) {
+                            rawPlayback.currentTime = trimStartSec;
+                            await rawPlayback.play();
+                        } else {
+                            try { rawPlayback.pause(); } catch (_) { }
+                            try { rawPlayback.currentTime = endTime; } catch (_) { }
+                        }
                     }
                 }
                 processedSec += seg.duration;
@@ -4037,7 +4223,10 @@
 
                         rawPlayback.currentTime = Math.max(trimStartSec, rawPlayback.currentTime - step);
                         await new Promise(r => setTimeout(r, frameMs));
-                        if (rawPlayback.currentTime <= trimStartSec + 0.01) break;
+                        if (rawPlayback.currentTime <= trimStartSec + 0.01) {
+                            try { rawPlayback.pause(); } catch (_) { }
+                            try { rawPlayback.currentTime = trimStartSec; } catch (_) { }
+                        }
                     }
                     processedSec += seg.duration;
                     updateProgress(processedSec);
@@ -4072,7 +4261,267 @@
             updateDateOverlayPreview();
         }
 
+        // === WEBCODECS INITIALIZATION ===
+        async function detectWebCodecsSupport() {
+            if (!('VideoEncoder' in window) || !('VideoDecoder' in window)) {
+                useWebCodecs = false;
+                console.log('[WebCodecs] Not supported - using MediaRecorder fallback');
+                setEncoderBadge('SW CPU', 'cpu');
+                return;
+            }
+
+            if (typeof Mp4Muxer === 'undefined') {
+                useWebCodecs = false;
+                console.log('[WebCodecs] MP4 muxer not loaded - using MediaRecorder fallback');
+                setEncoderBadge('SW CPU', 'cpu');
+                return;
+            }
+
+            // Test H.264 encoding support
+            try {
+                const config = {
+                    codec: 'avc1.42001E', // H.264 Baseline
+                    width: 1280,
+                    height: 720,
+                    bitrate: 2000000,
+                    framerate: 30,
+                    hardwareAcceleration: 'prefer-hardware',
+                    latencyMode: 'realtime'
+                };
+
+                const support = await VideoEncoder.isConfigSupported(config);
+                if (support.supported) {
+                    useWebCodecs = true;
+                    console.log('[WebCodecs] ✅ H.264 hardware encoding SUPPORTED');
+                    setEncoderBadge('HW READY', 'gpu');
+                } else {
+                    useWebCodecs = false;
+                    console.log('[WebCodecs] H.264 not supported - using fallback');
+                    setEncoderBadge('SW CPU', 'cpu');
+                }
+            } catch (e) {
+                useWebCodecs = false;
+                console.error('[WebCodecs] Detection error:', e);
+                setEncoderBadge('SW CPU', 'cpu');
+            }
+        }
+
+        // WebCodecs Recorder Class with MP4 Muxer
+        class WebCodecsRecorder {
+            constructor(stream, options = {}) {
+                this.stream = stream;
+                this.videoTrack = stream.getVideoTracks()[0];
+                this.options = options;
+                this.encoder = null;
+                this.muxer = null;
+                this.frameCounter = 0;
+                this.startTime = 0;
+                this.reader = null;
+                this.isRecording = false;
+                this.keyFrameIntervalFrames = 0;
+            }
+
+            async start() {
+                const settings = this.videoTrack.getSettings();
+                const width = settings.width || 1280;
+                const height = settings.height || 720;
+                const framerate = settings.frameRate || 30;
+                const refBaseBitrate = Math.max(this.options.videoBitsPerSecond || 8000000, 12000000);
+                const refPixelsPerSec = 1920 * 1080 * 30;
+                const scale = (width * height * framerate) / refPixelsPerSec;
+                const minBitrate = 8000000;
+                const maxBitrate = 120000000;
+                const bitrate = Math.min(maxBitrate, Math.max(minBitrate, Math.round(refBaseBitrate * Math.max(1, scale))));
+                this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
+
+                this.frameCounter = 0;
+                this.startTime = performance.now();
+                this.isRecording = true;
+
+                // Initialize MP4 Muxer
+                this.muxer = new Mp4Muxer.Muxer({
+                    target: new Mp4Muxer.ArrayBufferTarget(),
+                    video: {
+                        codec: 'avc',
+                        width,
+                        height
+                    },
+                    fastStart: 'in-memory'
+                });
+
+                // Configure encoder for hardware acceleration
+                const codecCandidates = (width * height >= 3840 * 2160)
+                    ? ['avc1.640033', 'avc1.640032', 'avc1.640029', 'avc1.4D4029', 'avc1.42E01F', 'avc1.42E01E']
+                    : (width * height >= 1920 * 1080)
+                        ? ['avc1.640029', 'avc1.4D4029', 'avc1.42E01F', 'avc1.42E01E']
+                        : ['avc1.42E01F', 'avc1.42E01E'];
+                const baseConfig = {
+                    width,
+                    height,
+                    bitrate,
+                    framerate
+                };
+                const configVariants = [
+                    { ...baseConfig, bitrateMode: 'variable', latencyMode: 'quality' },
+                    { ...baseConfig, latencyMode: 'quality' },
+                    { ...baseConfig, bitrateMode: 'variable' },
+                    { ...baseConfig }
+                ];
+                const accelVariants = ['prefer-hardware', 'no-preference'];
+                let chosen = null;
+                for (const accel of accelVariants) {
+                    for (const codec of codecCandidates) {
+                        for (const variant of configVariants) {
+                            const cfg = { ...variant, codec, hardwareAcceleration: accel };
+                            const support = await VideoEncoder.isConfigSupported(cfg);
+                            if (support && support.supported) {
+                                chosen = support.config || cfg;
+                                break;
+                            }
+                        }
+                        if (chosen) break;
+                    }
+                    if (chosen) break;
+                }
+                if (!chosen) {
+                    throw new Error('No supported H.264 encoder config for current resolution.');
+                }
+                this.chosenConfig = chosen;
+
+                this.encoder = new VideoEncoder({
+                    output: (chunk, metadata) => {
+                        // Send encoded chunk to muxer
+                        this.muxer.addVideoChunk(chunk, metadata);
+                    },
+                    error: (e) => {
+                        console.error('[WebCodecs] Encode error:', e);
+                    }
+                });
+
+                this.encoder.configure(chosen);
+
+                // Check if MediaStreamTrackProcessor is available (Chrome only)
+                if (typeof MediaStreamTrackProcessor !== 'undefined') {
+                    // Chrome method - direct frame access
+                    const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
+                    this.reader = processor.readable.getReader();
+                    this.processFrames();
+                } else {
+                    // Safari fallback - use canvas to capture frames
+                    this.captureFramesWithCanvas(width, height, framerate);
+                }
+            }
+
+            async processFrames() {
+                try {
+                    while (this.isRecording) {
+                        const { done, value: frame } = await this.reader.read();
+                        if (done) break;
+
+                        if (frame && this.encoder.state === 'configured') {
+                            const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
+                            this.encoder.encode(frame, { keyFrame });
+                            this.frameCounter++;
+                        }
+
+                        frame?.close();
+                    }
+                } catch (e) {
+                    console.error('[WebCodecs] Frame processing error:', e);
+                }
+            }
+
+            captureFramesWithCanvas(width, height, framerate) {
+                // Safari method - canvas-based frame capture
+                const video = document.createElement('video');
+                video.srcObject = this.stream;
+                video.autoplay = true;
+                video.muted = true;
+                video.playsInline = true;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+
+                const frameInterval = 1000 / framerate;
+                let lastFrameTime = 0;
+
+                const captureFrame = async (timestamp) => {
+                    if (!this.isRecording) return;
+
+                    const elapsed = timestamp - lastFrameTime;
+                    if (elapsed >= frameInterval) {
+                        lastFrameTime = timestamp;
+
+                        try {
+                            // Draw video frame to canvas
+                            ctx.drawImage(video, 0, 0, width, height);
+
+                            // Create VideoFrame from canvas (Safari-compatible method)
+                            const frame = new VideoFrame(canvas, {
+                                timestamp: this.frameCounter * (1_000_000 / framerate),
+                                duration: 1_000_000 / framerate
+                            });
+
+                            if (this.encoder.state === 'configured') {
+                            const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
+                                this.encoder.encode(frame, { keyFrame });
+                                this.frameCounter++;
+                            }
+
+                            frame.close();
+                        } catch (e) {
+                            console.error('[WebCodecs] Frame capture error:', e);
+                        }
+                    }
+
+                    if (this.isRecording) {
+                        requestAnimationFrame(captureFrame);
+                    }
+                };
+
+                video.addEventListener('loadedmetadata', () => {
+                    requestAnimationFrame(captureFrame);
+                });
+            }
+
+            async stop() {
+                this.isRecording = false;
+
+                if (this.reader) {
+                    try {
+                        await this.reader.cancel();
+                    } catch (e) {
+                        console.error('[WebCodecs] Reader cancel error:', e);
+                    }
+                    this.reader = null;
+                }
+
+                if (this.encoder && this.encoder.state === 'configured') {
+                    try {
+                        await this.encoder.flush();
+                        this.encoder.close();
+                    } catch (e) {
+                        console.error('[WebCodecs] Encoder flush/close error:', e);
+                    }
+                }
+
+                // Finalize muxer and create MP4 blob
+                if (this.muxer) {
+                    this.muxer.finalize();
+                    const { buffer } = this.muxer.target;
+                    console.log(`[WebCodecs] Created MP4 file: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                    return new Blob([buffer], { type: 'video/mp4' });
+                }
+
+                console.warn('[WebCodecs] No muxer available');
+                return new Blob([], { type: 'video/mp4' });
+            }
+        }
+
         // Kamerák betöltése csak user gesture után (pl. módváltás / gombnyomás), különben a böngésző blokkolhatja.
+        detectWebCodecsSupport(); // Check WebCodecs support on init
         initOrientationUI(); // Mobil: auto orientáció, Desktop: manuális választó
         applyOutputAspectFromUI();
         applyOverlayFitFromUI();
@@ -4248,38 +4697,71 @@
         }, 500);
 
         // === HAMBURGER MENU ===
+        const menuPanelState = {
+            left: null,
+            right: null,
+            leftParent: null,
+            rightParent: null,
+            leftNext: null,
+            rightNext: null
+        };
+
+        function initMenuPanels() {
+            if (menuPanelState.left && menuPanelState.right) return;
+            const left = document.getElementById('leftPanel') || document.querySelector('.left-panel');
+            const right = document.getElementById('rightPanel') || document.querySelector('.right-panel');
+            if (!left || !right) return;
+            menuPanelState.left = left;
+            menuPanelState.right = right;
+            menuPanelState.leftParent = left.parentNode;
+            menuPanelState.rightParent = right.parentNode;
+            menuPanelState.leftNext = left.nextSibling;
+            menuPanelState.rightNext = right.nextSibling;
+        }
+
+        function movePanelsToMenu() {
+            const content = document.getElementById('menuContent');
+            if (!content) return;
+            content.innerHTML = '';
+            initMenuPanels();
+            if (!menuPanelState.left || !menuPanelState.right) return;
+            menuPanelState.left.classList.remove('left-panel');
+            menuPanelState.right.classList.remove('right-panel');
+            menuPanelState.left.classList.add('menu-panel');
+            menuPanelState.right.classList.add('menu-panel');
+            content.appendChild(menuPanelState.left);
+            content.appendChild(menuPanelState.right);
+        }
+
+        function restorePanelsFromMenu() {
+            if (!menuPanelState.left || !menuPanelState.right) return;
+            menuPanelState.left.classList.remove('menu-panel');
+            menuPanelState.right.classList.remove('menu-panel');
+            menuPanelState.left.classList.add('left-panel');
+            menuPanelState.right.classList.add('right-panel');
+            const leftParent = menuPanelState.leftParent || document.querySelector('.container');
+            const rightParent = menuPanelState.rightParent || document.querySelector('.container');
+            if (leftParent) {
+                leftParent.insertBefore(menuPanelState.left, menuPanelState.leftNext);
+            }
+            if (rightParent) {
+                if (menuPanelState.rightNext) {
+                    rightParent.insertBefore(menuPanelState.right, menuPanelState.rightNext);
+                } else {
+                    rightParent.appendChild(menuPanelState.right);
+                }
+            }
+        }
+
         function toggleMenu() {
             const drawer = document.getElementById('menuDrawer');
             const isOpen = drawer.classList.contains('open');
 
             if (!isOpen) {
-                // Menü tartalom betöltése első megnyitáskor
-                const content = document.getElementById('menuContent');
-                if (!content.innerHTML) {
-                    const left = document.querySelector('.left-panel').cloneNode(true);
-                    const right = document.querySelector('.right-panel').cloneNode(true);
-
-                    // Force display for cloned panels
-                    left.style.display = 'block';
-                    left.style.visibility = 'visible';
-                    left.style.opacity = '1';
-                    left.classList.remove('left-panel');
-                    left.classList.add('menu-panel');
-
-                    right.style.display = 'block';
-                    right.style.visibility = 'visible';
-                    right.style.opacity = '1';
-                    right.classList.remove('right-panel');
-                    right.classList.add('menu-panel');
-
-                    content.appendChild(left);
-                    content.appendChild(right);
-
-                    // Re-attach event handlers for cloned inputs
-                    rebindMenuEvents();
-                }
+                movePanelsToMenu();
                 document.body.classList.add('menu-open');
             } else {
+                restorePanelsFromMenu();
                 document.body.classList.remove('menu-open');
             }
 
