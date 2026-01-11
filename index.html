@@ -2199,6 +2199,60 @@
             return `${mbps % 1 === 0 ? mbps.toFixed(0) : mbps.toFixed(1)}M`;
         }
 
+        function isAndroidDevice() {
+            return /Android/i.test(navigator.userAgent || '');
+        }
+
+        function getSupportedMp4Mime() {
+            if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+            const mp4 = [
+                'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                'video/mp4;codecs=avc1.42E01E',
+                'video/mp4'
+            ];
+            for (const m of mp4) {
+                try {
+                    if (MediaRecorder.isTypeSupported(m)) return m;
+                } catch (_) { }
+            }
+            return '';
+        }
+
+        function autoPreferMp4OnAndroid() {
+            if (!isAndroidDevice()) return;
+            if (preferredFormat !== 'auto') return;
+            const mp4 = getSupportedMp4Mime();
+            if (!mp4) return;
+            preferredFormat = 'mp4';
+            const sel = document.getElementById('formatPref');
+            if (sel) sel.value = 'mp4';
+        }
+
+        function isH264Mime(mime) {
+            const m = String(mime || '').toLowerCase();
+            return m.includes('avc1') || m.includes('h264') || m.includes('mp4');
+        }
+
+        function getRecorderCodecLabel(mime) {
+            const m = String(mime || '').toLowerCase();
+            if (m.includes('avc1') || m.includes('h264') || m.includes('mp4')) return 'MR H.264';
+            if (m.includes('vp9')) return 'MR VP9';
+            if (m.includes('vp8')) return 'MR VP8';
+            if (m.includes('av1')) return 'MR AV1';
+            return 'MR';
+        }
+
+        function buildRecorderBadgeText(mime, settings, bps) {
+            const label = getRecorderCodecLabel(mime);
+            const w = settings && settings.width ? settings.width : 0;
+            const h = settings && settings.height ? settings.height : 0;
+            const fr = settings && settings.frameRate ? settings.frameRate : 0;
+            const parts = [label];
+            if (w && h && fr) parts.push(`${w}x${h}@${Math.round(fr)}fps`);
+            if (bps) parts.push(fmtMbps(bps));
+            return parts.filter(Boolean).join(' ');
+        }
+
         function setEncoderBadge(text, mode) {
             const badge = document.getElementById('encoderBadge');
             if (!badge) return;
@@ -2224,46 +2278,58 @@
             return parts.filter(Boolean).join(' ');
         }
 
-        // Orientáció UI inicializálás (mobil=auto, desktop=manuális)
+        // Orientáció UI inicializálás (auto + manuális választó)
+        let orientationListenerReady = false;
         function initOrientationUI() {
             const container = document.getElementById('orientationModeContainer');
             if (!container) return;
 
             const isMobile = isMobileOrTablet();
 
-            if (isMobile) {
-                // MOBIL/TABLET: Automatikus orientáció
-                isAutoOrientationEnabled = true;
-                container.innerHTML = `
-                    <div style="padding: 8px; background: rgba(32, 211, 193, 0.15); border: 1px solid rgba(32, 211, 193, 0.4); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">
-                        📱 Automatikus orientáció: forgasd a készüléket!
-                    </div>
-                `;
+            container.innerHTML = `
+                <label>Orientáció mód</label>
+                <select id="outputAspect" onchange="applyOutputAspectFromUI()">
+                    <option value="auto">Auto (szenzor)</option>
+                    <option value="landscape">Fekvő (16:9)</option>
+                    <option value="portrait">Álló (9:16)</option>
+                </select>
+                ${isMobile ? '<div style="padding: 6px 8px; background: rgba(32, 211, 193, 0.12); border: 1px solid rgba(32, 211, 193, 0.35); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">📱 Ha az auto nem jó, válts kézire itt.</div>' : ''}
+            `;
 
-                // Beállítjuk az aktuális orientációt
+            const sel = container.querySelector('#outputAspect');
+            if (sel) {
+                if (isMobile) {
+                    sel.value = 'auto';
+                    isAutoOrientationEnabled = true;
+                } else {
+                    sel.value = outputAspectMode;
+                    isAutoOrientationEnabled = false;
+                }
+            }
+
+            if (isAutoOrientationEnabled) {
                 updateOrientationFromViewport();
-
-                // Listener beállítása
-                setupOrientationListener();
-            } else {
-                // DESKTOP: Manuális választó (NDI használathoz)
-                isAutoOrientationEnabled = false;
-                container.innerHTML = `
-                    <label>Kimenet képarány (NDI)</label>
-                    <select id="outputAspect" onchange="applyOutputAspectFromUI()">
-                        <option value="landscape" selected>Fekvő (landscape)</option>
-                        <option value="portrait">Álló (portrait)</option>
-                    </select>
-                `;
+                if (!orientationListenerReady) {
+                    setupOrientationListener();
+                    orientationListenerReady = true;
+                }
             }
         }
 
         function applyOutputAspectFromUI() {
-            // Desktop: manuális választó értéke
-            if (!isAutoOrientationEnabled) {
-                const sel = document.getElementById('outputAspect');
-                if (sel) {
-                    outputAspectMode = sel.value;
+            const sel = document.getElementById('outputAspect');
+            if (sel) {
+                const v = sel.value;
+                if (v === 'auto') {
+                    isAutoOrientationEnabled = true;
+                    updateOrientationFromViewport();
+                    if (!orientationListenerReady) {
+                        setupOrientationListener();
+                        orientationListenerReady = true;
+                    }
+                } else {
+                    isAutoOrientationEnabled = false;
+                    outputAspectMode = v;
                 }
             }
 
@@ -3883,7 +3949,7 @@
                     console.error('[WebCodecs] Start failed, falling back to MediaRecorder:', e);
                     useWebCodecs = false; // Disable for this session
                     webCodecsEncoder = null;
-                    setEncoderBadge('SW MediaRecorder', 'cpu');
+                    setEncoderBadge('MR READY', 'cpu');
                 }
             }
 
@@ -3923,7 +3989,11 @@
             isRecording = true;
             recordStartMs = performance.now();
             if (btn) btn.textContent = 'FELVÉTEL STOP';
-            setEncoderBadge(`SW ${pick1.mime}`, 'cpu');
+            const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+            const settings = track && track.getSettings ? track.getSettings() : null;
+            const badgeText = buildRecorderBadgeText(pick1.mime, settings, videoBitsPerSecond);
+            const badgeMode = isH264Mime(pick1.mime) ? 'gpu' : 'cpu';
+            setEncoderBadge(badgeText, badgeMode);
 
             if (autoStopEnabled && autoStopSec > 0) {
                 autoStopTimer = setTimeout(() => {
@@ -4267,6 +4337,7 @@
                 useWebCodecs = false;
                 console.log('[WebCodecs] Not supported - using MediaRecorder fallback');
                 setEncoderBadge('SW CPU', 'cpu');
+                autoPreferMp4OnAndroid();
                 return;
             }
 
@@ -4274,6 +4345,7 @@
                 useWebCodecs = false;
                 console.log('[WebCodecs] MP4 muxer not loaded - using MediaRecorder fallback');
                 setEncoderBadge('SW CPU', 'cpu');
+                autoPreferMp4OnAndroid();
                 return;
             }
 
@@ -4291,19 +4363,18 @@
 
                 const support = await VideoEncoder.isConfigSupported(config);
                 if (support.supported) {
-                    useWebCodecs = true;
-                    console.log('[WebCodecs] ✅ H.264 hardware encoding SUPPORTED');
-                    setEncoderBadge('HW READY', 'gpu');
+                    console.log('[WebCodecs] ✅ H.264 encoding SUPPORTED');
                 } else {
-                    useWebCodecs = false;
-                    console.log('[WebCodecs] H.264 not supported - using fallback');
-                    setEncoderBadge('SW CPU', 'cpu');
+                    console.log('[WebCodecs] H.264 baseline test failed, trying anyway.');
                 }
+                useWebCodecs = true;
+                setEncoderBadge('HW READY', 'gpu');
             } catch (e) {
-                useWebCodecs = false;
-                console.error('[WebCodecs] Detection error:', e);
-                setEncoderBadge('SW CPU', 'cpu');
+                console.error('[WebCodecs] Detection error, trying anyway:', e);
+                useWebCodecs = true;
+                setEncoderBadge('HW READY', 'gpu');
             }
+            autoPreferMp4OnAndroid();
         }
 
         // WebCodecs Recorder Class with MP4 Muxer
@@ -4350,11 +4421,15 @@
                 });
 
                 // Configure encoder for hardware acceleration
-                const codecCandidates = (width * height >= 3840 * 2160)
-                    ? ['avc1.640033', 'avc1.640032', 'avc1.640029', 'avc1.4D4029', 'avc1.42E01F', 'avc1.42E01E']
+                const baseCandidates = (width * height >= 3840 * 2160)
+                    ? ['avc1.640033', 'avc1.640032', 'avc1.64002A', 'avc1.640029', 'avc1.4D402A', 'avc1.4D4029', 'avc1.42E02A', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E']
                     : (width * height >= 1920 * 1080)
-                        ? ['avc1.640029', 'avc1.4D4029', 'avc1.42E01F', 'avc1.42E01E']
-                        : ['avc1.42E01F', 'avc1.42E01E'];
+                        ? ['avc1.64002A', 'avc1.4D402A', 'avc1.640029', 'avc1.4D4029', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E']
+                        : ['avc1.42E01F', 'avc1.42E01E', 'avc1.42001E'];
+                const androidPreferred = ['avc1.42001E', 'avc1.42E01E', 'avc1.42E01F'];
+                const codecCandidates = isAndroidDevice()
+                    ? [...androidPreferred, ...baseCandidates.filter((c) => !androidPreferred.includes(c))]
+                    : baseCandidates;
                 const baseConfig = {
                     width,
                     height,
