@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360 HW Record Minimal</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, sans-serif; background: #0b0f14; color: #111; }
+        #app { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+        .panel { background: #fff; border: 1px solid #d3d9e0; border-radius: 10px; padding: 10px; box-shadow: 0 4px 14px rgba(15,23,42,.08); }
+        .row { margin-bottom: 10px; }
+        label { font-size: 12px; font-weight: 600; color: #334155; }
+        select, input, button { width: 100%; margin-top: 4px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; }
+        button { cursor: pointer; font-weight: 700; background: #0f172a; color: #f8fafc; }
+        button:disabled { opacity: .6; cursor: not-allowed; }
+        .buttons { display: grid; gap: 8px; }
+        #preview, #playback { width: 100%; height: 100%; background: #0b0f14; }
+        #audioMeter { height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+        #audioLevel { height: 100%; width: 0%; background: #16a34a; transition: width .08s linear; }
+        #menuBtn { position: fixed; top: 14px; right: 14px; z-index: 20; width: 44px; height: 44px; border-radius: 10px; }
+        #menuBackdrop { position: fixed; inset: 0; background: rgba(3, 7, 18, .45); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 14; }
+        #menuBackdrop.open { opacity: 1; pointer-events: auto; }
+        #menuDrawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(360px, 92vw); background: #eef1f4; transform: translateX(100%); transition: transform .2s ease; z-index: 15; padding: 12px; overflow: auto; }
+        #menuHeader { display: flex; justify-content: flex-end; }
+        #menuClose { width: 36px; height: 36px; border-radius: 8px; }
+        #menuDrawer.open { transform: translateX(0); }
+        #recBtnWrap { position: fixed; right: 16px; bottom: 16px; z-index: 20; }
+        #btnRecord { width: 140px; height: 44px; border-radius: 999px; }
+        #videoWrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <button id="menuBtn" title="Menu">☰</button>
+        <div id="recBtnWrap">
+            <button id="btnRecord" disabled>REC</button>
+        </div>
+        <div id="videoWrap">
+            <canvas id="preview"></canvas>
+            <video id="playback" controls style="display:none"></video>
+        </div>
+
+        <div id="menuBackdrop"></div>
+        <div id="menuDrawer">
+            <div id="menuHeader">
+                <button id="menuClose" title="Close">✕</button>
+            </div>
+            <div class="panel">
+                <div class="row" id="browserWarning" style="display:none; color:#b91c1c;">
+                    Chrome/Edge only • WebCodecs HW required
+                </div>
+                <div class="row" style="font-size: 12px; color: #334155;">
+                    Encoder: <span id="encoderStatus">Detecting...</span><br>
+                    Actual: <span id="actualRes">-</span><br>
+                    Aspect: <span id="statusAspect">-</span><br>
+                    Rec FPS: <span id="statusFps">-</span><br>
+                    Rec bitrate: <span id="statusBitrate">-</span>
+                </div>
+                <div class="buttons">
+                    <button id="btnStartCam" class="primary">Start camera</button>
+                </div>
+                <div class="row">
+                    <label for="camSelect">Camera</label>
+                    <select id="camSelect"></select>
+                </div>
+            <div class="row">
+                <label for="micSelect">Mic</label>
+                <select id="micSelect"></select>
+            </div>
+            <div class="row">
+                <label>Camera caps</label>
+                <div id="camCaps">-</div>
+            </div>
+            <div class="row">
+                <label for="overlayFile">Overlay PNG</label>
+                <input id="overlayFile" type="file" accept="image/png">
+            </div>
+            <div class="row">
+                <label for="audioMixFile">Audio file (mix)</label>
+                <input id="audioMixFile" type="file" accept="audio/*">
+            </div>
+            <div class="row">
+                <label for="mixBalance">Audio mix (mic ↔ file)</label>
+                <input id="mixBalance" type="range" min="-1" max="1" step="0.01" value="0">
+            </div>
+            <div class="row">
+                <label for="resolution">Resolution</label>
+                <select id="resolution"></select>
+            </div>
+            <div class="row">
+                <label for="codecSelect">Codec</label>
+                <select id="codecSelect">
+                    <option value="auto" selected>Auto (best supported)</option>
+                    <option value="h264-high">H.264 High</option>
+                    <option value="h264-main">H.264 Main</option>
+                    <option value="h264-base">H.264 Baseline</option>
+                </select>
+            </div>
+            <div class="row">
+                <label for="bitrateInput">Avg bitrate (Mbps, 0 = auto)</label>
+                <input id="bitrateInput" type="number" min="0" max="200" value="0">
+            </div>
+            <div class="buttons">
+            </div>
+            <div class="row">
+                <label>Mic level</label>
+                <div id="audioMeter"><div id="audioLevel"></div></div>
+            </div>
+            <div class="status">
+                <div id="log"></div>
+            </div>
+            <div class="buttons" id="outputActions" style="display:none">
+                <button id="btnOpenOutput">Open in new tab</button>
+                <button id="btnDownloadOutput">Download</button>
+                <button id="btnClearOutput">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"
+        onerror="this.onerror=null;this.src='https://unpkg.com/mp4-muxer@5.2.2/build/mp4-muxer.js'"></script>
+    <script>
+        const preview = document.getElementById('preview');
+        const canvas = preview;
+        const ctx = canvas.getContext('2d');
+        const playback = document.getElementById('playback');
+        const camSelect = document.getElementById('camSelect');
+        const micSelect = document.getElementById('micSelect');
+        const camCaps = document.getElementById('camCaps');
+        const overlayFile = document.getElementById('overlayFile');
+        const audioMixFile = document.getElementById('audioMixFile');
+        const mixBalance = document.getElementById('mixBalance');
+        const resolution = document.getElementById('resolution');
+        const codecSelect = document.getElementById('codecSelect');
+        const btnStartCam = document.getElementById('btnStartCam');
+        const btnRecord = document.getElementById('btnRecord');
+        const encoderStatus = document.getElementById('encoderStatus');
+        const actualRes = document.getElementById('actualRes');
+        const statusFps = document.getElementById('statusFps');
+        const statusBitrate = document.getElementById('statusBitrate');
+        const statusAspect = document.getElementById('statusAspect');
+        const browserWarning = document.getElementById('browserWarning');
+        const logEl = document.getElementById('log');
+        const audioLevel = document.getElementById('audioLevel');
+        const outputActions = document.getElementById('outputActions');
+        const btnOpenOutput = document.getElementById('btnOpenOutput');
+        const btnDownloadOutput = document.getElementById('btnDownloadOutput');
+        const btnClearOutput = document.getElementById('btnClearOutput');
+        const menuBtn = document.getElementById('menuBtn');
+        const menuDrawer = document.getElementById('menuDrawer');
+        const menuBackdrop = document.getElementById('menuBackdrop');
+        const menuClose = document.getElementById('menuClose');
+        const bitrateInput = document.getElementById('bitrateInput');
+
+        const liveVideo = document.createElement('video');
+        liveVideo.autoplay = true;
+        liveVideo.muted = true;
+        liveVideo.playsInline = true;
+
+        let cameraStream = null;
+        let drawRaf = 0;
+        let lastDraw = 0;
+        let overlayReady = false;
+        let overlayCrop = null;
+        const overlayImg = new Image();
+        let currentBlobUrl = null;
+        let recorder = null;
+        let activeCanvasStream = null;
+        let isRecording = false;
+        let useWebCodecs = false;
+        let audioCtx = null;
+        let audioAnalyser = null;
+        let audioMeterRaf = 0;
+        let recStartMs = 0;
+        let recBytes = 0;
+        let recStatsTimer = 0;
+        let previewFps = 30;
+        let audioFileBuffer = null;
+        let audioFileName = '';
+        let recordAudioCtx = null;
+        let recordAudioSources = [];
+        let mixValue = 0;
+        let mixGainMic = null;
+        let mixGainFile = null;
+
+        function logMsg(msg) {
+            logEl.textContent = msg;
+        }
+
+        function setCanvasSizeFromTrack(track) {
+            const settings = track && track.getSettings ? track.getSettings() : {};
+            const w = settings.width || 1920;
+            const h = settings.height || 1080;
+            canvas.width = w;
+            canvas.height = h;
+            applyPreviewFit();
+        }
+
+        function applyPreviewFit() {
+            const vw = window.innerWidth || canvas.width;
+            const vh = window.innerHeight || canvas.height;
+            const ar = canvas.width / canvas.height;
+            const viewAr = vw / vh;
+            if (viewAr > ar) {
+                preview.style.height = '100%';
+                preview.style.width = 'auto';
+            } else {
+                preview.style.width = '100%';
+                preview.style.height = 'auto';
+            }
+            playback.style.width = preview.style.width;
+            playback.style.height = preview.style.height;
+        }
+
+        function drawVideoCover(ctx2, videoEl, dstW, dstH) {
+            const vw = videoEl.videoWidth || dstW;
+            const vh = videoEl.videoHeight || dstH;
+            const srcAspect = vw / vh;
+            const dstAspect = dstW / dstH;
+            let sx = 0;
+            let sy = 0;
+            let sw = vw;
+            let sh = vh;
+            if (srcAspect > dstAspect) {
+                sh = vh;
+                sw = Math.round(vh * dstAspect);
+                sx = Math.round((vw - sw) / 2);
+            } else {
+                sw = vw;
+                sh = Math.round(vw / dstAspect);
+                sy = Math.round((vh - sh) / 2);
+            }
+            ctx2.drawImage(videoEl, sx, sy, sw, sh, 0, 0, dstW, dstH);
+        }
+
+        function drawOverlayToCanvas(ctx2, w, h) {
+            if (!overlayReady || !overlayImg.naturalWidth) return;
+            if (overlayCrop) {
+                ctx2.drawImage(
+                    overlayImg,
+                    overlayCrop.sx, overlayCrop.sy, overlayCrop.sw, overlayCrop.sh,
+                    0, 0, w, h
+                );
+            } else {
+                ctx2.drawImage(overlayImg, 0, 0, w, h);
+            }
+        }
+
+        function drawFrame() {
+            if (!cameraStream || liveVideo.readyState < 2) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawVideoCover(ctx, liveVideo, canvas.width, canvas.height);
+            drawOverlayToCanvas(ctx, canvas.width, canvas.height);
+        }
+
+        function startDrawLoop() {
+            stopDrawLoop();
+            const loop = (ts) => {
+                const frameMs = 1000 / Math.max(1, previewFps);
+                if (ts - lastDraw >= frameMs) {
+                    lastDraw = ts;
+                    drawFrame();
+                }
+                drawRaf = requestAnimationFrame(loop);
+            };
+            drawRaf = requestAnimationFrame(loop);
+        }
+
+        function stopDrawLoop() {
+            if (drawRaf) {
+                cancelAnimationFrame(drawRaf);
+                drawRaf = 0;
+            }
+        }
+
+        overlayFile.addEventListener('change', () => {
+            const file = overlayFile.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            overlayReady = false;
+            overlayCrop = null;
+            reader.onload = (e) => {
+                overlayImg.onload = () => {
+                    overlayCrop = computeAlphaCrop(overlayImg);
+                    overlayReady = true;
+                    logMsg('Overlay loaded.');
+                };
+                overlayImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        if (audioMixFile) {
+            audioMixFile.addEventListener('change', async () => {
+                const file = audioMixFile.files[0];
+                audioFileBuffer = null;
+                audioFileName = '';
+                if (!file) return;
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const data = await file.arrayBuffer();
+                    audioFileBuffer = await ctx.decodeAudioData(data);
+                    audioFileName = file.name || 'audio';
+                    await ctx.close();
+                    logMsg(`Audio loaded: ${audioFileName}`);
+                } catch (e) {
+                    console.error(e);
+                    logMsg('Audio load failed.');
+                }
+            });
+        }
+
+        if (mixBalance) {
+            mixBalance.addEventListener('input', () => {
+                mixValue = parseFloat(mixBalance.value || '0');
+                updateMixGains();
+            });
+        }
+
+        function computeAlphaCrop(img) {
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            const c = document.createElement('canvas');
+            c.width = w;
+            c.height = h;
+            const cctx = c.getContext('2d');
+            cctx.drawImage(img, 0, 0);
+            const data = cctx.getImageData(0, 0, w, h).data;
+            let minX = w, minY = h, maxX = -1, maxY = -1;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const a = data[(y * w + x) * 4 + 3];
+                    if (a > 0) {
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+            if (maxX < minX || maxY < minY) return null;
+            return { sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1 };
+        }
+
+        async function detectWebCodecsSupport() {
+            const isChromium = !!window.chrome && /Chrome|Edg/i.test(navigator.userAgent);
+            const missing = [];
+            if (!('VideoEncoder' in window)) missing.push('VideoEncoder');
+            if (!('AudioEncoder' in window)) missing.push('AudioEncoder');
+            if (typeof MediaStreamTrackProcessor === 'undefined') missing.push('MediaStreamTrackProcessor');
+            if (typeof Mp4Muxer === 'undefined') missing.push('mp4-muxer');
+
+            if (missing.length) {
+                useWebCodecs = false;
+                encoderStatus.textContent = 'WebCodecs required';
+                logMsg(`Missing: ${missing.join(', ')}`);
+                btnRecord.disabled = true;
+                if (browserWarning) browserWarning.style.display = 'block';
+                return;
+            }
+            useWebCodecs = true;
+            encoderStatus.textContent = 'WebCodecs HW ready';
+            if (browserWarning) browserWarning.style.display = isChromium ? 'none' : 'block';
+        }
+
+        async function refreshDevices() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cams = devices.filter((d) => d.kind === 'videoinput');
+            const mics = devices.filter((d) => d.kind === 'audioinput');
+
+            camSelect.innerHTML = '';
+            cams.forEach((cam, idx) => {
+                const opt = document.createElement('option');
+                opt.value = cam.deviceId;
+                opt.textContent = cam.label || `Camera ${idx + 1}`;
+                camSelect.appendChild(opt);
+            });
+
+            micSelect.innerHTML = '';
+            mics.forEach((mic, idx) => {
+                const opt = document.createElement('option');
+                opt.value = mic.deviceId;
+                opt.textContent = mic.label || `Mic ${idx + 1}`;
+                micSelect.appendChild(opt);
+            });
+        }
+
+        async function startCamera() {
+            stopCamera();
+            const camId = camSelect.value;
+            const micId = micSelect.value;
+            const constraints = {
+                video: camId ? { deviceId: { exact: camId } } : true,
+                audio: {
+                    ...(micId ? { deviceId: { exact: micId } } : {}),
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }
+            };
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+            } catch (e) {
+                logMsg('Camera/mic permission failed.');
+                console.error(e);
+                return;
+            }
+
+            liveVideo.srcObject = cameraStream;
+            try {
+                await liveVideo.play();
+            } catch (_) {
+                logMsg('Video play blocked. Click once on the page and try again.');
+            }
+
+            const track = cameraStream.getVideoTracks()[0];
+            updateCameraCaps(track);
+            populateResolutionOptions(track);
+            await applyResolutionSelection(track, true);
+            const settings = track && track.getSettings ? track.getSettings() : {};
+            if (statusFps) statusFps.textContent = String(Math.round(settings.frameRate || 30));
+            if (statusAspect && settings.width && settings.height) {
+                statusAspect.textContent = `${settings.width}:${settings.height}`;
+            }
+            startAudioMeter(cameraStream);
+            startDrawLoop();
+            btnRecord.disabled = !useWebCodecs;
+            logMsg('Camera ready.');
+            await refreshDevices();
+        }
+
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach((t) => t.stop());
+                cameraStream = null;
+            }
+            stopAudioMeter();
+        }
+
+        function cleanupRecordingStream() {
+            if (activeCanvasStream) {
+                activeCanvasStream.getTracks().forEach((t) => t.stop());
+                activeCanvasStream = null;
+            }
+        }
+
+        function handleRecordingComplete(blob, ext) {
+            cleanupRecordingStream();
+            if (currentBlobUrl) {
+                URL.revokeObjectURL(currentBlobUrl);
+            }
+            currentBlobUrl = URL.createObjectURL(blob);
+            playback.src = currentBlobUrl;
+            playback.style.display = 'block';
+            preview.style.display = 'none';
+            if (outputActions) outputActions.style.display = 'grid';
+            logMsg(`Saved (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+            recBytes = 0;
+        }
+
+        async function startRecording() {
+            if (!cameraStream) {
+                logMsg('Start the camera first.');
+                return;
+            }
+            clearOutput();
+            const track = cameraStream.getVideoTracks()[0];
+            const settings = track && track.getSettings ? track.getSettings() : {};
+            setCanvasSizeFromTrack(track);
+            const fps = settings.frameRate || 30;
+            const bitrateValue = bitrateInput ? parseFloat(bitrateInput.value) : 0;
+            const bitrate = (bitrateValue && bitrateValue > 0)
+                ? Math.round(bitrateValue * 1_000_000)
+                : Math.max(8_000_000, Math.round(canvas.width * canvas.height * fps * 0.07));
+            if (statusFps) statusFps.textContent = String(Math.round(fps));
+            if (statusBitrate) statusBitrate.textContent = `${(bitrate / 1_000_000).toFixed(1)} Mbps`;
+            const canvasStream = canvas.captureStream(fps);
+            activeCanvasStream = canvasStream;
+            const videoTrack = canvasStream.getVideoTracks()[0];
+            if (!useWebCodecs) {
+                logMsg('WebCodecs required. Recording blocked.');
+                cleanupRecordingStream();
+                return;
+            }
+            const micTrack = cameraStream.getAudioTracks()[0] || null;
+            if (!micTrack && !audioFileBuffer) {
+                logMsg('No mic audio track and no audio file.');
+                cleanupRecordingStream();
+                return;
+            }
+            const mixedTrack = buildMixedAudioTrack(micTrack, audioFileBuffer);
+            if (!mixedTrack) {
+                logMsg('Audio mix failed.');
+                cleanupRecordingStream();
+                return;
+            }
+            recorder = new WebCodecsRecorder(videoTrack, mixedTrack, {
+                width: canvas.width,
+                height: canvas.height,
+                framerate: fps,
+                videoBitsPerSecond: bitrate,
+                sourceCanvas: canvas
+            });
+            try {
+                await recorder.start();
+                startAudioMixPlayback();
+                if (recorder.chosenConfig) {
+                    encoderStatus.textContent = `WebCodecs ${recorder.chosenConfig.codec || 'avc1'} ${canvas.width}x${canvas.height}@${fps}`;
+                } else {
+                    encoderStatus.textContent = 'WebCodecs running';
+                }
+            } catch (e) {
+                console.error(e);
+                logMsg('WebCodecs failed to start.');
+                cleanupRecordingStream();
+                recorder = null;
+                return;
+            }
+
+            isRecording = true;
+            recBytes = 0;
+            recStartMs = performance.now();
+            if (recStatsTimer) clearInterval(recStatsTimer);
+            recStatsTimer = setInterval(() => {
+                const elapsed = Math.max(0.001, (performance.now() - recStartMs) / 1000);
+                const avgMbps = (recBytes * 8) / (elapsed * 1_000_000);
+                if (statusBitrate) statusBitrate.textContent = `${avgMbps.toFixed(1)} Mbps`;
+            }, 500);
+            btnRecord.textContent = 'Stop recording';
+            logMsg('Recording...');
+        }
+
+        async function stopRecording() {
+            if (!isRecording) return;
+            isRecording = false;
+            btnRecord.textContent = 'Start recording';
+            if (recorder) {
+                try {
+                    logMsg('Stopping...');
+                    const blob = await recorder.stop();
+                    handleRecordingComplete(blob, 'mp4');
+                } catch (e) {
+                    console.error(e);
+                    logMsg(`Stop failed: ${e && e.message ? e.message : 'unknown error'}`);
+                }
+                recorder = null;
+            }
+            stopAudioMix();
+            if (recStatsTimer) {
+                clearInterval(recStatsTimer);
+                recStatsTimer = 0;
+            }
+        }
+
+        btnStartCam.addEventListener('click', startCamera);
+        btnRecord.addEventListener('click', async () => {
+            if (isRecording) await stopRecording();
+            else await startRecording();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopCamera();
+            stopDrawLoop();
+        });
+
+        function clearOutput() {
+            if (currentBlobUrl) {
+                URL.revokeObjectURL(currentBlobUrl);
+                currentBlobUrl = null;
+            }
+            playback.removeAttribute('src');
+            playback.style.display = 'none';
+            preview.style.display = 'block';
+            if (outputActions) outputActions.style.display = 'none';
+        }
+
+        function buildMixedAudioTrack(micTrack, fileBuffer) {
+            stopAudioMix();
+            recordAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const dest = recordAudioCtx.createMediaStreamDestination();
+            recordAudioSources = [];
+            mixGainMic = recordAudioCtx.createGain();
+            mixGainFile = recordAudioCtx.createGain();
+            updateMixGains();
+            if (micTrack) {
+                const micStream = new MediaStream([micTrack]);
+                const micSource = recordAudioCtx.createMediaStreamSource(micStream);
+                micSource.connect(mixGainMic);
+                mixGainMic.connect(dest);
+                recordAudioSources.push(micSource);
+            }
+            if (fileBuffer) {
+                const fileSource = recordAudioCtx.createBufferSource();
+                fileSource.buffer = fileBuffer;
+                fileSource.connect(mixGainFile);
+                mixGainFile.connect(dest);
+                recordAudioSources.push(fileSource);
+            }
+            return dest.stream.getAudioTracks()[0] || null;
+        }
+
+        function startAudioMixPlayback() {
+            if (!recordAudioCtx) return;
+            if (recordAudioCtx.state === 'suspended') {
+                recordAudioCtx.resume().catch(() => {});
+            }
+            recordAudioSources.forEach((src) => {
+                if (src && typeof src.start === 'function') {
+                    try { src.start(0); } catch (_) {}
+                }
+            });
+        }
+
+        function stopAudioMix() {
+            recordAudioSources.forEach((src) => {
+                try { if (src && typeof src.stop === 'function') src.stop(0); } catch (_) {}
+            });
+            recordAudioSources = [];
+            mixGainMic = null;
+            mixGainFile = null;
+            if (recordAudioCtx) {
+                try { recordAudioCtx.close(); } catch (_) {}
+                recordAudioCtx = null;
+            }
+        }
+
+        function updateMixGains() {
+            const v = Math.max(-1, Math.min(1, mixValue || 0));
+            const micLevel = v <= 0 ? 1 : 1 - v;
+            const fileLevel = v >= 0 ? 1 : 1 + v;
+            if (mixGainMic) mixGainMic.gain.value = micLevel;
+            if (mixGainFile) mixGainFile.gain.value = fileLevel;
+        }
+
+        if (btnOpenOutput) {
+            btnOpenOutput.addEventListener('click', () => {
+                if (!currentBlobUrl) return;
+                window.open(currentBlobUrl, '_blank');
+            });
+        }
+        if (btnDownloadOutput) {
+            btnDownloadOutput.addEventListener('click', () => {
+                if (!currentBlobUrl) return;
+                const now = new Date();
+                const name = `360_hw_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.mp4`;
+                const a = document.createElement('a');
+                a.href = currentBlobUrl;
+                a.download = name;
+                a.click();
+            });
+        }
+        if (btnClearOutput) {
+            btnClearOutput.addEventListener('click', clearOutput);
+        }
+
+        function toggleMenu(open) {
+            if (!menuDrawer) return;
+            const shouldOpen = (typeof open === 'boolean') ? open : !menuDrawer.classList.contains('open');
+            menuDrawer.classList.toggle('open', shouldOpen);
+            if (menuBackdrop) menuBackdrop.classList.toggle('open', shouldOpen);
+            if (menuBtn) menuBtn.style.display = shouldOpen ? 'none' : '';
+        }
+        if (menuBtn) menuBtn.addEventListener('click', () => toggleMenu());
+        if (menuBackdrop) menuBackdrop.addEventListener('click', () => toggleMenu(false));
+        if (menuClose) menuClose.addEventListener('click', () => toggleMenu(false));
+        window.addEventListener('resize', applyPreviewFit);
+
+        function updateCameraCaps(track) {
+            if (!camCaps || !track || !track.getCapabilities) return;
+            const caps = track.getCapabilities();
+            const w = caps.width ? `${caps.width.min || '?'}–${caps.width.max || '?'}` : '?';
+            const h = caps.height ? `${caps.height.min || '?'}–${caps.height.max || '?'}` : '?';
+            const fps = caps.frameRate ? `${caps.frameRate.min || '?'}–${caps.frameRate.max || '?'}` : '?';
+            camCaps.textContent = `W ${w} • H ${h} • FPS ${fps}`;
+        }
+
+        function populateResolutionOptions(track) {
+            if (!resolution) return;
+            resolution.innerHTML = '';
+            const optMax = document.createElement('option');
+            optMax.value = 'max';
+            optMax.textContent = 'MAX (auto)';
+            resolution.appendChild(optMax);
+
+            const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+            const maxW = caps.width && caps.width.max ? caps.width.max : 1920;
+            const maxH = caps.height && caps.height.max ? caps.height.max : 1080;
+            const presets = [
+                [maxW, maxH],
+                [1920, 1080],
+                [1280, 720],
+                [640, 480]
+            ];
+            const seen = new Set();
+            presets.forEach(([w, h]) => {
+                if (w > maxW || h > maxH) return;
+                const key = `${w}x${h}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = key;
+                resolution.appendChild(opt);
+            });
+            resolution.value = 'max';
+        }
+
+        async function applyResolutionSelection(track, useMaxByDefault) {
+            if (!track || !track.applyConstraints) return;
+            const caps = track.getCapabilities ? track.getCapabilities() : {};
+            const maxW = caps.width && caps.width.max ? caps.width.max : null;
+            const maxH = caps.height && caps.height.max ? caps.height.max : null;
+            const maxFps = caps.frameRate && caps.frameRate.max ? caps.frameRate.max : null;
+            const selected = (useMaxByDefault || !resolution) ? 'max' : resolution.value;
+            let width;
+            let height;
+            if (selected === 'max' && maxW && maxH) {
+                width = maxW;
+                height = maxH;
+            } else if (selected && selected.includes('x')) {
+                const parts = selected.split('x').map((n) => Number(n));
+                width = parts[0];
+                height = parts[1];
+            }
+            try {
+                const constraints = { width: width ? { exact: width } : undefined, height: height ? { exact: height } : undefined };
+                if (maxFps) constraints.frameRate = { ideal: maxFps };
+                await track.applyConstraints(constraints);
+            } catch (e) {
+                try {
+                    const fallback = { width: width ? { ideal: width } : undefined, height: height ? { ideal: height } : undefined };
+                    if (maxFps) fallback.frameRate = { ideal: maxFps };
+                    await track.applyConstraints(fallback);
+                } catch (err) {
+                    console.warn('[CAM] applyConstraints failed:', err);
+                }
+            }
+            const settings = track.getSettings ? track.getSettings() : {};
+            actualRes.textContent = `${settings.width || '?'}x${settings.height || '?'}`;
+            if (statusAspect && settings.width && settings.height) {
+                statusAspect.textContent = `${settings.width}:${settings.height}`;
+            }
+            setCanvasSizeFromTrack(track);
+            previewFps = settings.frameRate || 30;
+            if (statusFps) statusFps.textContent = String(Math.round(previewFps));
+        }
+
+        function startAudioMeter(stream) {
+            stopAudioMeter();
+            const track = stream.getAudioTracks()[0];
+            if (!track) {
+                if (audioLevel) audioLevel.style.width = '0%';
+                return;
+            }
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioCtx.createMediaStreamSource(stream);
+                audioAnalyser = audioCtx.createAnalyser();
+                audioAnalyser.fftSize = 2048;
+                source.connect(audioAnalyser);
+                const data = new Uint8Array(audioAnalyser.fftSize);
+                const tick = () => {
+                    if (!audioAnalyser) return;
+                    audioAnalyser.getByteTimeDomainData(data);
+                    let sum = 0;
+                    for (let i = 0; i < data.length; i++) {
+                        const v = (data[i] - 128) / 128;
+                        sum += v * v;
+                    }
+                    const rms = Math.sqrt(sum / data.length);
+                    const pct = Math.min(100, Math.max(0, Math.round(rms * 220)));
+                    if (audioLevel) audioLevel.style.width = `${pct}%`;
+                    audioMeterRaf = requestAnimationFrame(tick);
+                };
+                audioMeterRaf = requestAnimationFrame(tick);
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        function stopAudioMeter() {
+            if (audioMeterRaf) {
+                cancelAnimationFrame(audioMeterRaf);
+                audioMeterRaf = 0;
+            }
+            if (audioCtx) {
+                try { audioCtx.close(); } catch (_) {}
+                audioCtx = null;
+            }
+            audioAnalyser = null;
+            if (audioLevel) audioLevel.style.width = '0%';
+        }
+
+        class WebCodecsRecorder {
+            constructor(videoTrack, audioTrack, options = {}) {
+                this.videoTrack = videoTrack;
+                this.audioTrack = audioTrack;
+                this.options = options;
+                this.encoder = null;
+                this.audioEncoder = null;
+                this.muxer = null;
+                this.reader = null;
+                this.audioReader = null;
+                this.frameCounter = 0;
+                this.keyFrameIntervalFrames = 0;
+                this.isRecording = false;
+                this.sourceCanvas = options.sourceCanvas || null;
+                this.chosenConfig = null;
+                this.videoBaseTs = null;
+                this.audioBaseTs = null;
+            }
+
+            async start() {
+                const settings = this.videoTrack.getSettings();
+                const width = this.options.width || settings.width || 1280;
+                const height = this.options.height || settings.height || 720;
+                const framerate = this.options.framerate || settings.frameRate || 30;
+                const bitrate = this.options.videoBitsPerSecond || 12000000;
+                this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
+                this.frameCounter = 0;
+                this.isRecording = true;
+
+                const audioInfo = this.getAudioInfo();
+                if (!audioInfo) {
+                    throw new Error('AudioEncoder or mic missing.');
+                }
+                this.muxer = new Mp4Muxer.Muxer({
+                    target: new Mp4Muxer.ArrayBufferTarget(),
+                    video: { codec: 'avc', width, height },
+                    ...(audioInfo ? { audio: audioInfo } : {}),
+                    fastStart: 'in-memory'
+                });
+
+                this.chosenConfig = await this.pickVideoConfig(width, height, framerate, bitrate);
+                this.encoder = new VideoEncoder({
+                    output: (chunk, metadata) => {
+                        try {
+                            let muxMeta;
+                            if (metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
+                                muxMeta = { ...metadata, decoderConfig: { ...metadata.decoderConfig } };
+                                if (muxMeta.decoderConfig.colorSpace == null) {
+                                    delete muxMeta.decoderConfig.colorSpace;
+                                }
+                            }
+                            this.muxer.addVideoChunk(chunk, muxMeta);
+                            recBytes += chunk.byteLength || 0;
+                        } catch (e) {
+                            console.warn('[WebCodecs] muxer addVideoChunk failed:', e);
+                        }
+                    },
+                    error: (e) => console.error('[WebCodecs] Video encode error:', e)
+                });
+                this.encoder.configure(this.chosenConfig);
+
+                await this.startAudioEncoding(audioInfo);
+
+                if (typeof MediaStreamTrackProcessor !== 'undefined') {
+                    const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
+                    this.reader = processor.readable.getReader();
+                    this.processFrames();
+                } else {
+                    this.captureFramesWithCanvas(width, height, framerate);
+                }
+            }
+
+            getAudioInfo() {
+                if (!this.audioTrack || !('AudioEncoder' in window)) return null;
+                const settings = this.audioTrack.getSettings();
+                return {
+                    codec: 'aac',
+                    numberOfChannels: settings.channelCount || 2,
+                    sampleRate: settings.sampleRate || 48000
+                };
+            }
+
+            async startAudioEncoding(audioInfo) {
+                if (!audioInfo) return;
+                const bitrate = this.options.audioBitsPerSecond || 128000;
+                const config = {
+                    codec: 'mp4a.40.2',
+                    sampleRate: audioInfo.sampleRate,
+                    numberOfChannels: audioInfo.numberOfChannels,
+                    bitrate
+                };
+                const supported = await AudioEncoder.isConfigSupported(config);
+                const finalConfig = supported && supported.supported ? (supported.config || config) : config;
+                this.audioEncoder = new AudioEncoder({
+                    output: (chunk, metadata) => {
+                        this.muxer.addAudioChunk(chunk, metadata);
+                        recBytes += chunk.byteLength || 0;
+                    },
+                    error: (e) => console.error('[WebCodecs] Audio encode error:', e)
+                });
+                this.audioEncoder.configure(finalConfig);
+                const processor = new MediaStreamTrackProcessor({ track: this.audioTrack });
+                this.audioReader = processor.readable.getReader();
+                this.processAudio();
+            }
+
+            async pickVideoConfig(width, height, framerate, bitrate) {
+                const selectMode = (codecSelect && codecSelect.value) ? codecSelect.value : 'auto';
+                const h264High = (width * height >= 3840 * 2160)
+                    ? ['avc1.640033', 'avc1.640032', 'avc1.64002A', 'avc1.640029']
+                    : ['avc1.64002A', 'avc1.640029'];
+                const h264Main = ['avc1.4D402A', 'avc1.4D4029'];
+                const h264Base = ['avc1.42E02A', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E'];
+                const hevc = ['hvc1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'hvc1.1.6.L93.B0'];
+
+                let baseCandidates = [];
+                if (selectMode === 'h264-high') baseCandidates = [...h264High, ...h264Main, ...h264Base];
+                else if (selectMode === 'h264-main') baseCandidates = [...h264Main, ...h264High, ...h264Base];
+                else if (selectMode === 'h264-base') baseCandidates = [...h264Base, ...h264Main, ...h264High];
+                else if (selectMode === 'hevc') baseCandidates = [...hevc, ...h264High, ...h264Main, ...h264Base];
+                else baseCandidates = [...h264High, ...h264Main, ...h264Base];
+                const baseConfig = { width, height, bitrate, framerate };
+                const configVariants = [
+                    { ...baseConfig, bitrateMode: 'variable', latencyMode: 'quality' },
+                    { ...baseConfig, latencyMode: 'quality' },
+                    { ...baseConfig, bitrateMode: 'variable' },
+                    { ...baseConfig }
+                ];
+                const accelVariants = ['prefer-hardware', 'no-preference'];
+                for (const accel of accelVariants) {
+                    for (const codec of baseCandidates) {
+                        for (const variant of configVariants) {
+                            const cfg = { ...variant, codec, hardwareAcceleration: accel };
+                            const support = await VideoEncoder.isConfigSupported(cfg);
+                            if (support && support.supported) {
+                                return support.config || cfg;
+                            }
+                        }
+                    }
+                }
+                throw new Error('No supported H.264 encoder config for this resolution.');
+            }
+
+            async processFrames() {
+                try {
+                    while (this.isRecording) {
+                        const { done, value: frame } = await this.reader.read();
+                        if (done) break;
+                        if (frame && this.encoder.state === 'configured') {
+                            if (this.videoBaseTs === null) this.videoBaseTs = frame.timestamp || 0;
+                            const adjTs = Math.max(0, (frame.timestamp || 0) - this.videoBaseTs);
+                            const adjFrame = new VideoFrame(frame, {
+                                timestamp: adjTs,
+                                duration: frame.duration
+                            });
+                            const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
+                            this.encoder.encode(adjFrame, { keyFrame });
+                            this.frameCounter++;
+                            adjFrame.close();
+                        }
+                        frame && frame.close();
+                    }
+                } catch (e) {
+                    console.error('[WebCodecs] Frame processing error:', e);
+                }
+            }
+
+            async processAudio() {
+                if (!this.audioReader || !this.audioEncoder) return;
+                try {
+                    while (this.isRecording) {
+                        const { done, value: audioData } = await this.audioReader.read();
+                        if (done) break;
+                        if (audioData && this.audioEncoder.state === 'configured') {
+                            if (this.audioBaseTs === null) this.audioBaseTs = audioData.timestamp || 0;
+                            const adjTs = Math.max(0, (audioData.timestamp || 0) - this.audioBaseTs);
+                            const { format, data } = buildInterleavedAudioData(audioData);
+                            const numberOfChannels = audioData.numberOfChannels;
+                            const numberOfFrames = audioData.numberOfFrames;
+                            const sampleRate = audioData.sampleRate;
+                            const adjAudio = new AudioData({
+                                format,
+                                sampleRate,
+                                numberOfFrames,
+                                numberOfChannels,
+                                timestamp: adjTs,
+                                data
+                            });
+                            this.audioEncoder.encode(adjAudio);
+                            adjAudio.close();
+                        }
+                        audioData && audioData.close();
+                    }
+                } catch (e) {
+                    console.error('[WebCodecs] Audio processing error:', e);
+                }
+            }
+
+            captureFramesWithCanvas(width, height, framerate) {
+                const canvasRef = this.sourceCanvas;
+                if (!canvasRef) {
+                    throw new Error('Canvas source missing for fallback capture.');
+                }
+                const frameInterval = 1000 / framerate;
+                let lastFrameTime = 0;
+                const captureFrame = (timestamp) => {
+                    if (!this.isRecording) return;
+                    const elapsed = timestamp - lastFrameTime;
+                    if (elapsed >= frameInterval) {
+                        lastFrameTime = timestamp;
+                        try {
+                            const frame = new VideoFrame(canvasRef, {
+                                timestamp: this.frameCounter * (1_000_000 / framerate),
+                                duration: 1_000_000 / framerate
+                            });
+                            if (this.encoder.state === 'configured') {
+                                const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
+                                this.encoder.encode(frame, { keyFrame });
+                                this.frameCounter++;
+                            }
+                            frame.close();
+                        } catch (e) {
+                            console.error('[WebCodecs] Frame capture error:', e);
+                        }
+                    }
+                    requestAnimationFrame(captureFrame);
+                };
+                requestAnimationFrame(captureFrame);
+            }
+
+            async stop() {
+                this.isRecording = false;
+                if (this.reader) {
+                    try {
+                        await this.reader.cancel();
+                    } catch (_) {
+                    }
+                    this.reader = null;
+                }
+                if (this.audioReader) {
+                    try {
+                        await this.audioReader.cancel();
+                    } catch (_) {
+                    }
+                    this.audioReader = null;
+                }
+                if (this.encoder && this.encoder.state === 'configured') {
+                    try {
+                        await this.encoder.flush();
+                        this.encoder.close();
+                    } catch (e) {
+                        console.warn('[WebCodecs] Video flush/close error:', e);
+                    }
+                }
+                if (this.audioEncoder && this.audioEncoder.state === 'configured') {
+                    try {
+                        await this.audioEncoder.flush();
+                        this.audioEncoder.close();
+                    } catch (e) {
+                        console.warn('[WebCodecs] Audio flush/close error:', e);
+                    }
+                }
+                if (this.muxer) {
+                    this.muxer.finalize();
+                    const { buffer } = this.muxer.target;
+                    return new Blob([buffer], { type: 'video/mp4' });
+                }
+                return new Blob([], { type: 'video/mp4' });
+            }
+        }
+
+        if (resolution) {
+            resolution.addEventListener('change', async () => {
+                const track = cameraStream && cameraStream.getVideoTracks ? cameraStream.getVideoTracks()[0] : null;
+                if (track) await applyResolutionSelection(track, false);
+            });
+        }
+        refreshDevices();
+        detectWebCodecsSupport();
+
+        function buildInterleavedAudioData(audioData) {
+            const format = audioData.format;
+            const channels = audioData.numberOfChannels;
+            const frames = audioData.numberOfFrames;
+            const baseFormat = format.includes('planar') ? format.replace('-planar', '') : format;
+            const isF32 = baseFormat === 'f32';
+            const isS16 = baseFormat === 's16';
+            const TypedArray = isF32 ? Float32Array : (isS16 ? Int16Array : Uint8Array);
+            const out = new TypedArray(frames * channels);
+
+            if (format.includes('planar')) {
+                for (let ch = 0; ch < channels; ch++) {
+                    const plane = new TypedArray(frames);
+                    audioData.copyTo(plane, { planeIndex: ch });
+                    for (let i = 0; i < frames; i++) {
+                        out[i * channels + ch] = plane[i];
+                    }
+                }
+            } else {
+                audioData.copyTo(out, { planeIndex: 0 });
+            }
+            return { format: baseFormat, data: out };
+        }
+    </script>
+</body>
+
+</html>
