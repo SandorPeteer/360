@@ -110,7 +110,7 @@
                 </div>
                 <div class="row">
                     <label for="bitrateInput">Avg bitrate (Mbps, 0 = auto)</label>
-                    <input id="bitrateInput" type="number" min="0" max="200" value="20">
+                    <input id="bitrateInput" type="number" min="0" max="200" value="12">
                 </div>
                 <div class="status">
                     <div id="log"></div>
@@ -1138,7 +1138,7 @@
                     if (elapsed >= frameInterval) {
                         lastFrameTime = timestamp;
                         try {
-                            if (this.encoder.state === 'configured' && this.encoder.encodeQueueSize < 4) {
+                            if (this.encoder.state === 'configured' && this.encoder.encodeQueueSize < 2) {
                                 const frame = new VideoFrame(canvasRef, {
                                     timestamp: this.frameCounter * (1_000_000 / framerate),
                                     duration: 1_000_000 / framerate
