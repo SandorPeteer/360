@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal</title>
+    <title>360 HW Record Minimal v0.2</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -51,9 +51,10 @@
             </div>
             <div class="panel">
                 <div class="row" id="browserWarning" style="display:none; color:#b91c1c;">
-                    WebCodecs HW required on this device/browser
+                    WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
+                    Build: <span>v0.2 video-only fallback</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Actual: <span id="actualRes">-</span><br>
                     Aspect: <span id="statusAspect">-</span><br>
@@ -349,20 +350,23 @@
         async function detectWebCodecsSupport() {
             const missing = [];
             if (!('VideoEncoder' in window)) missing.push('VideoEncoder');
-            if (!('AudioEncoder' in window)) missing.push('AudioEncoder');
-            if (typeof MediaStreamTrackProcessor === 'undefined') missing.push('MediaStreamTrackProcessor');
             if (typeof Mp4Muxer === 'undefined') missing.push('mp4-muxer');
+            if (!canvas.captureStream) missing.push('canvas.captureStream');
 
             if (missing.length) {
                 useWebCodecs = false;
                 encoderStatus.textContent = 'WebCodecs required';
                 logMsg(`Missing: ${missing.join(', ')}`);
                 btnRecord.disabled = true;
-                if (browserWarning) browserWarning.style.display = 'block';
+                if (browserWarning) {
+                    browserWarning.textContent = `Missing: ${missing.join(', ')}`;
+                    browserWarning.style.display = 'block';
+                }
                 return;
             }
             useWebCodecs = true;
-            encoderStatus.textContent = 'WebCodecs HW ready';
+            const audioStatus = ('AudioEncoder' in window) ? '+ audio encoder' : 'video-only capable';
+            encoderStatus.textContent = `WebCodecs HW ready (${audioStatus})`;
             if (browserWarning) browserWarning.style.display = 'none';
         }
 
@@ -486,17 +490,15 @@
                 cleanupRecordingStream();
                 return;
             }
+            let mixedTrack = null;
             const micTrack = cameraStream.getAudioTracks()[0] || null;
-            if (!micTrack && !audioFileBuffer) {
-                logMsg('No mic audio track and no audio file.');
-                cleanupRecordingStream();
-                return;
-            }
-            const mixedTrack = buildMixedAudioTrack(micTrack, audioFileBuffer);
-            if (!mixedTrack) {
-                logMsg('Audio mix failed.');
-                cleanupRecordingStream();
-                return;
+            if ('AudioEncoder' in window && (micTrack || audioFileBuffer)) {
+                mixedTrack = buildMixedAudioTrack(micTrack, audioFileBuffer);
+                if (!mixedTrack) {
+                    logMsg('Audio unavailable, recording video only.');
+                }
+            } else if (micTrack || audioFileBuffer) {
+                logMsg('AudioEncoder missing, recording video only.');
             }
             recorder = new WebCodecsRecorder(videoTrack, mixedTrack, {
                 width: canvas.width,
@@ -825,9 +827,6 @@
                 this.isRecording = true;
 
                 const audioInfo = this.getAudioInfo();
-                if (!audioInfo) {
-                    throw new Error('AudioEncoder or mic missing.');
-                }
                 this.muxer = new Mp4Muxer.Muxer({
                     target: new Mp4Muxer.ArrayBufferTarget(),
                     video: { codec: 'avc', width, height },
@@ -879,6 +878,7 @@
 
             async startAudioEncoding(audioInfo) {
                 if (!audioInfo) return;
+                if (typeof MediaStreamTrackProcessor === 'undefined') return;
                 const bitrate = this.options.audioBitsPerSecond || 128000;
                 const config = {
                     codec: 'mp4a.40.2',
