@@ -3381,20 +3381,15 @@
             stream = null;
 
             try {
-                // Kamera beállítások: FHD lock (16:9/9:16) 60fps, vagy UI szerinti cél
-                const useNative = !!useSourceResolution;
-                const targetWidth = cameraWidth || 1920;
-                const targetHeight = cameraHeight || 1080;
+                // Kamera beállítások: mindig fekvő 1280×720 kérés, a forgatást a canvas végzi
+                // (Portré aspectRatio kérés Android Chrome-ban metadata-forgatott keretet ad,
+                //  amit ctx.drawImage rosszul rajzol ki → 90°-os dőlés. Fekvő kéréssel ez elkerülhető.)
                 const targetFps = cameraFps || 60;
-                const wantPortrait = outputAspectMode === 'portrait';
-                const lockWidth = wantPortrait ? 720 : 1280;
-                const lockHeight = wantPortrait ? 1280 : 720;
                 const constraints = {
                     video: {
-                        width: useNative ? { ideal: lockWidth } : { ideal: targetWidth },
-                        height: useNative ? { ideal: lockHeight } : { ideal: targetHeight },
-                        frameRate: useNative ? { ideal: 60, min: 30 } : { ideal: targetFps },
-                        aspectRatio: useNative ? (wantPortrait ? 9 / 16 : 16 / 9) : undefined,
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: targetFps, min: 24 },
                         ...(id ? { deviceId: { exact: id } } : {})
                     },
                     audio: false
@@ -3426,44 +3421,34 @@
                 drawLivePreviewLoop();
 
                 const track = stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
-                if (track && useNative) {
-                    await enforceLockedCameraConstraints(track);
-                }
-                if (track && !userCameraChoiceTouched && !useSourceResolution && !autoCameraTuned) {
+                if (track && !userCameraChoiceTouched && !autoCameraTuned) {
                     await autoTuneCameraForBestFps(track);
                     autoCameraTuned = true;
                 }
                 const settings = track && track.getSettings ? track.getSettings() : null;
                 if (settings) {
-                    // Natív beállítások csak akkor írják felül a UI-t, ha az opció aktív
                     if (settings.width && settings.height) {
-                        if (useNative) {
-                            cameraWidth = settings.width;
-                            cameraHeight = settings.height;
-                            setSelectValueOrAdd(
-                                document.getElementById('cameraResolution'),
-                                `${cameraWidth}x${cameraHeight}`,
-                                `${cameraWidth}x${cameraHeight} (lock)`
-                            );
-                        }
+                        cameraWidth = settings.width;
+                        cameraHeight = settings.height;
+                        setSelectValueOrAdd(
+                            document.getElementById('cameraResolution'),
+                            `${cameraWidth}x${cameraHeight}`,
+                            `${cameraWidth}x${cameraHeight} (auto)`
+                        );
                     }
                     if (settings.frameRate) {
-                        if (useNative) {
-                            cameraFps = Math.round(settings.frameRate);
-                            setSelectValueOrAdd(
-                                document.getElementById('cameraFps'),
-                                String(cameraFps),
-                                `${cameraFps} fps (lock)`
-                            );
-                        }
+                        cameraFps = Math.round(settings.frameRate);
+                        setSelectValueOrAdd(
+                            document.getElementById('cameraFps'),
+                            String(cameraFps),
+                            `${cameraFps} fps (auto)`
+                        );
                     }
-                }
-                if (useNative) {
                     applyPreviewFpsLockFromSettings(settings);
                 }
                 const autoEl = document.getElementById('autoTuneInfo');
                 if (autoEl) {
-                    if (useNative && autoCameraTuned && settings && settings.width && settings.height && settings.frameRate) {
+                    if (autoCameraTuned && settings && settings.width && settings.height && settings.frameRate) {
                         autoEl.textContent = `${settings.width}x${settings.height} @ ${Math.round(settings.frameRate)} fps`;
                     } else {
                         autoEl.textContent = autoCameraTuned ? 'AUTO OK' : '-';
@@ -4016,15 +4001,15 @@
             chunks = [];
             try { await waitForFirstFrame(liveVideo, 2000); } catch (_) { }
 
-            // Lower preview FPS during recording to prioritize recording quality
+            // WebCodecs felvételnél a canvas-ból dolgozunk — a preview loop adja a képkockákat,
+            // ezért nem csökkentjük a previewFps-t (a WebCodecsRecorder maga ütemezi a frame capture-t)
             originalPreviewFps = previewFps;
-            previewFps = 2;
 
             // === USE WEBCODECS IF AVAILABLE ===
             if (useWebCodecs) {
                 try {
-                    console.log('[REC] Using WebCodecs H.264 hardware encoding');
-                    webCodecsEncoder = new WebCodecsRecorder(stream, { videoBitsPerSecond });
+                    console.log('[REC] Using WebCodecs H.264 hardware encoding (canvas)');
+                    webCodecsEncoder = new WebCodecsRecorder(canvas, { videoBitsPerSecond, fps: renderFps });
                     await webCodecsEncoder.start();
                     if (webCodecsEncoder && webCodecsEncoder.chosenConfig) {
                         setEncoderBadge(buildEncoderBadgeText(webCodecsEncoder.chosenConfig, 'HW'), 'gpu');
@@ -4052,17 +4037,18 @@
                 }
             }
 
-            // === FALLBACK: MEDIARECORDER ===
+            // === FALLBACK: MEDIARECORDER (canvas-ból, hogy a forgatás benne legyen) ===
             const pick1 = pickRecorderMime(preferredFormat);
+            const fallbackStream = canvas.captureStream ? canvas.captureStream(renderFps) : stream;
             try {
-                mediaRecorder = new MediaRecorder(stream, {
+                mediaRecorder = new MediaRecorder(fallbackStream, {
                     mimeType: pick1.mime,
                     videoBitsPerSecond,
                     videoKeyFrameInterval: 1000
                 });
             } catch (e) {
                 try {
-                    mediaRecorder = new MediaRecorder(stream, { mimeType: pick1.mime, videoBitsPerSecond });
+                    mediaRecorder = new MediaRecorder(fallbackStream, { mimeType: pick1.mime, videoBitsPerSecond });
                 } catch (err) {
                     console.error('[REC] MediaRecorder create failed:', err);
                     statusBadge.innerText = 'RÖGZÍTÉS HIBA';
@@ -4194,7 +4180,7 @@
             }
         }
 
-        // --- 5. FŐ FELDOLGOZÓ LOOP (KÖZÖS MINDKÉT MÓDHÓZ) ---
+        // --- 5. FŐ FELDOLGOZÓ LOOP (KÖZÖS MINDKÉT MÓDHOZ) ---
         async function startProcessingLoop() {
             isProcessing = true;
             isRecording = false;
@@ -4202,39 +4188,40 @@
             statusBadge.innerText = "FELDOLGOZÁS..."; statusBadge.style.color = "yellow";
             progressBarContainer.style.display = 'block';
             const startBtn = document.getElementById('startBtn');
-            if (startBtn) {
-                startBtn.disabled = true;
-                startBtn.textContent = 'FELDOLGOZÁS...';
-            }
-            // Kimenet doboz elrejtése feldolgozás alatt
+            if (startBtn) { startBtn.disabled = true; startBtn.textContent = 'FELDOLGOZÁS...'; }
             if (lastOutputBox) lastOutputBox.style.display = 'none';
-
             liveVideo.style.display = 'none';
             canvas.style.display = 'block';
 
-            // Várjuk meg a forrás videó metaadatát, hogy tudjuk a képarányt
+            // Forrás videó metaadat — 5 másodperces timeout a biztonsági kilépéshez
             try {
                 if (rawPlayback.readyState < 1) {
                     await new Promise((res) => {
                         const onMeta = () => { rawPlayback.removeEventListener('loadedmetadata', onMeta); res(); };
                         rawPlayback.addEventListener('loadedmetadata', onMeta);
+                        setTimeout(res, 5000);
                     });
                 }
-            } catch (_) { }
+            } catch (_) {}
 
-            const srcW = rawPlayback.videoWidth || 1280;
-            const srcH = rawPlayback.videoHeight || 720;
+            if (!rawPlayback.videoWidth || !rawPlayback.videoHeight) {
+                statusBadge.innerText = 'HIBA: forrás videó nem töltött be';
+                statusBadge.style.color = 'red';
+                progressBarContainer.style.display = 'none';
+                isProcessing = false;
+                resetUI();
+                return;
+            }
+
+            const srcW = rawPlayback.videoWidth;
+            const srcH = rawPlayback.videoHeight;
             const chosen = chooseCanvasSizeByMode(srcW, srcH);
-
-            // Canvas fix méret beállítás (a mentett videó képaránya IS EZ LESZ)
             canvas.width = chosen.w;
             canvas.height = chosen.h;
             setVideoContainerAspectFromCanvas();
 
             const baseDuration = getSourceDurationSec(
-                (isFinite(rawPlayback.duration) && rawPlayback.duration > 0)
-                    ? rawPlayback.duration
-                    : undefined
+                (isFinite(rawPlayback.duration) && rawPlayback.duration > 0) ? rawPlayback.duration : undefined
             );
             let trimStartSec = 0;
             if (baseDuration > 0) {
@@ -4257,89 +4244,126 @@
                 renderTimeline();
             }
 
-            // Zene
+            // Zene betöltés
             const m = document.getElementById('musicFile');
-            let actx, dest, src, hasA = false;
-            if (m.files[0]) {
-                hasA = true; actx = new (window.AudioContext || window.webkitAudioContext)();
-                const b = await m.files[0].arrayBuffer();
-                const d = await actx.decodeAudioData(b);
-                dest = actx.createMediaStreamDestination();
-                src = actx.createBufferSource(); src.buffer = d; src.loop = true; src.connect(dest);
+            let actx, dest, musicSrc, hasA = false;
+            if (m && m.files[0]) {
+                try {
+                    actx = new (window.AudioContext || window.webkitAudioContext)();
+                    const b = await m.files[0].arrayBuffer();
+                    const d = await actx.decodeAudioData(b);
+                    dest = actx.createMediaStreamDestination();
+                    musicSrc = actx.createBufferSource();
+                    musicSrc.buffer = d;
+                    musicSrc.loop = true;
+                    musicSrc.connect(dest);
+                    hasA = true;
+                } catch (e) {
+                    console.warn('[MUSIC] betöltés hiba:', e);
+                    if (actx) { actx.close(); actx = null; }
+                    hasA = false;
+                }
             }
 
-            if (typeof canvas.captureStream !== 'function') {
-                statusBadge.innerText = 'SAFARI: CANVAS STREAM HIBA';
-                statusBadge.style.color = 'red';
-                processText.innerText = 'A canvas stream rögzítése nem elérhető ezen a Safari verzión (iOS 16.4+ szükséges). Frissítsd az iPadet, vagy használj Chrome-ot.';
-                progressBarContainer.style.display = 'none';
-                if (actx) actx.close();
-                isProcessing = false;
-                resetUI();
-                return;
+            // === WebCodecs encoder a feldolgozáshoz ===
+            const fps = renderFps > 0 ? renderFps : 30;
+            const frameMs = 1000 / fps;
+            const frameDurationUs = Math.round(1_000_000 / fps);
+            const keyFrameInterval = Math.max(1, Math.round(fps * 2));
+            let procFrameCounter = 0;
+            const procBitrate = Math.max(4000000, videoBitsPerSecond);
+
+            let procConfig = null;
+            for (const codec of ['avc1.64002A', 'avc1.4D402A', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E']) {
+                const cfg = { codec, width: canvas.width, height: canvas.height, bitrate: procBitrate, framerate: fps, hardwareAcceleration: 'prefer-hardware' };
+                try {
+                    const s = await VideoEncoder.isConfigSupported(cfg);
+                    if (s && s.supported) { procConfig = s.config || cfg; break; }
+                } catch (_) {}
             }
-            const cStream = canvas.captureStream(renderFps);
-            if (hasA) cStream.addTrack(dest.stream.getAudioTracks()[0]);
-
-            const pick3 = pickRecorderMime(preferredFormat);
-            let rec;
-            try {
-                rec = new MediaRecorder(cStream, { mimeType: pick3.mime, videoBitsPerSecond });
-            } catch (e) {
-                console.error('[REC] MediaRecorder(captureStream) create failed:', e);
-                statusBadge.innerText = 'RENDER HIBA';
-                statusBadge.style.color = 'red';
-                progressBarContainer.style.display = 'none';
-                processText.innerText = 'A böngésző nem tud canvas streamet rögzíteni. Safari-ban ez verziófüggő. Használj Chrome-ot a biztos működéshez.';
-                resetUI();
-                if (actx) actx.close();
-                return;
+            if (!procConfig) {
+                procConfig = { codec: 'avc1.42E01E', width: canvas.width, height: canvas.height, bitrate: procBitrate, framerate: fps };
             }
-            const fChunks = [];
-            rec.ondataavailable = e => { if (e.data.size > 0) fChunks.push(e.data) };
-            rec.onstop = () => {
-                const pick4 = pickRecorderMime(preferredFormat);
-                const outBlob = new Blob(fChunks, { type: pick4.mime });
-                const url = URL.createObjectURL(outBlob);
-                const thumb = buildProjectorThumb();
 
-                // Mutassuk meg az oldalon is (mert a macOS sokszor nem nyitja meg a .webm-et)
-                setLastOutput(url, pick4.mime, pick4.ext, outBlob.size);
-
-                // Azonnali letöltés (marad, de már a választott kiterjesztéssel)
-                const a = document.createElement('a');
-                const now = new Date();
-                a.href = url;
-                a.download = `360_Video_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.${pick4.ext}`;
-                a.click();
-
-                sendToProjector(url, thumb);
-                resetUI();
-                if (actx) actx.close();
+            // Muxer — opcionális audio támogatással
+            const muxerOpts = {
+                target: new Mp4Muxer.ArrayBufferTarget(),
+                video: { codec: 'avc', width: canvas.width, height: canvas.height },
+                fastStart: 'in-memory'
             };
-
-            rec.start();
-            if (hasA) src.start(0);
-
-            await seekToTime(rawPlayback, trimStartSec);
-            const playOk = await safePlay(rawPlayback, 2000);
-            if (!playOk) {
-                statusBadge.innerText = 'LEJÁTSZÁS HIBA';
-                statusBadge.style.color = 'red';
-                processText.innerText = 'A böngésző nem engedte a lejátszást (autoplay).';
-                progressBarContainer.style.display = 'none';
-                resetUI();
-                if (actx) actx.close();
-                return;
+            let audioEncoder = null;
+            let audioReader = null;
+            if (hasA && dest && 'AudioEncoder' in window && typeof MediaStreamTrackProcessor !== 'undefined') {
+                const aTrack = dest.stream.getAudioTracks()[0];
+                if (aTrack) {
+                    muxerOpts.audio = { codec: 'aac', numberOfChannels: 2, sampleRate: 48000 };
+                }
             }
-            await waitForFirstFrame(rawPlayback, 2000);
+
+            const procMuxer = new Mp4Muxer.Muxer(muxerOpts);
+
+            const procEncoder = new VideoEncoder({
+                output: (chunk, meta) => { try { procMuxer.addVideoChunk(chunk, meta); } catch (e) { console.warn('[PROC v]', e); } },
+                error: (e) => console.error('[PROC video]', e)
+            });
+            procEncoder.configure(procConfig);
+
+            if (muxerOpts.audio) {
+                const aTrack = dest.stream.getAudioTracks()[0];
+                audioEncoder = new AudioEncoder({
+                    output: (chunk, meta) => { try { procMuxer.addAudioChunk(chunk, meta); } catch (e) { console.warn('[PROC a]', e); } },
+                    error: (e) => console.warn('[PROC audio]', e)
+                });
+                audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 });
+                const audioProcessor = new MediaStreamTrackProcessor({ track: aTrack });
+                audioReader = audioProcessor.readable.getReader();
+            }
+
+            // Audio encoding loop (párhuzamosan fut)
+            let audioBaseTs = -1;
+            async function processAudioLoop() {
+                if (!audioReader || !audioEncoder) return;
+                try {
+                    while (isProcessing) {
+                        const { done, value: audioData } = await audioReader.read();
+                        if (done || !audioData) break;
+                        if (audioBaseTs < 0) audioBaseTs = audioData.timestamp;
+                        const adjTs = Math.max(0, audioData.timestamp - audioBaseTs);
+                        try {
+                            const { format, data } = buildInterleavedAudioData(audioData);
+                            audioEncoder.encode(new AudioData({
+                                format, data,
+                                numberOfFrames: audioData.numberOfFrames,
+                                numberOfChannels: audioData.numberOfChannels,
+                                sampleRate: audioData.sampleRate,
+                                timestamp: adjTs
+                            }));
+                        } catch (ae) { console.warn('[PROC audio] encode:', ae); }
+                        audioData.close();
+                    }
+                } catch (e) { console.warn('[PROC audio] loop:', e); }
+            }
+
+            function encodeCanvasFrame() {
+                const ts = procFrameCounter * frameDurationUs;
+                try {
+                    const vframe = new VideoFrame(canvas, { timestamp: ts, duration: frameDurationUs });
+                    if (procEncoder.state === 'configured') {
+                        procEncoder.encode(vframe, { keyFrame: procFrameCounter % keyFrameInterval === 0 });
+                        procFrameCounter++;
+                    }
+                    vframe.close();
+                } catch (e) { console.warn('[PROC] VideoFrame:', e); }
+            }
+
             const boomerang = !!document.getElementById('boomerangMode')?.checked;
             const pingPong = !!document.getElementById('pingPongMode')?.checked;
             let plan = effects.length > 0 ? effects : [{ duration: 1, speed: 1 }];
             if (boomerang && !pingPong) plan = [...plan, ...plan];
             const reversePlan = pingPong ? [...plan].slice().reverse() : [];
 
-            let totalSec = 0; plan.forEach(p => totalSec += p.duration);
+            let totalSec = 0;
+            plan.forEach(p => totalSec += p.duration);
             reversePlan.forEach(p => totalSec += p.duration);
             let processedSec = 0;
 
@@ -4349,33 +4373,90 @@
                 processText.innerText = Math.round(p) + "%";
             }
 
-            for (const seg of plan) {
+            if (hasA && musicSrc) musicSrc.start(0);
+            if (audioReader) processAudioLoop();
+
+            await seekToTime(rawPlayback, trimStartSec);
+            const playOk = await safePlay(rawPlayback, 2000);
+            if (!playOk) {
+                statusBadge.innerText = 'LEJÁTSZÁS HIBA';
+                statusBadge.style.color = 'red';
+                processText.innerText = 'A böngésző nem engedte a lejátszást.';
+                progressBarContainer.style.display = 'none';
+                try { if (procEncoder.state === 'configured') { await procEncoder.flush(); procEncoder.close(); } } catch (_) {}
+                if (actx) actx.close();
+                isProcessing = false;
+                resetUI();
+                return;
+            }
+            await waitForFirstFrame(rawPlayback, 2000);
+
+            // requestAnimationFrame alapú renderelő loop (nem throttolódik mobilon)
+            let lastRenderTs = -Infinity;
+
+            async function renderSegmentForward(seg) {
                 rawPlayback.playbackRate = seg.speed;
-                const s = performance.now();
-                const d = seg.duration * 1000;
-                const frameMs = renderFps > 0 ? (1000 / renderFps) : 33;
-                while (performance.now() - s < d) {
-                    drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
-                    // Overlay: stabilan csak akkor rajzoljuk, ha betöltött; tartalék naturalWidth alapján
-                    drawOverlayToCanvas(ctx, canvas.width, canvas.height);
-                    if (isDateOverlayEnabled()) {
-                        drawDateStamp(ctx, canvas.width, canvas.height);
-                    }
-
-                    const segElapsed = (performance.now() - s) / 1000;
-                    updateProgress(processedSec + segElapsed);
-
-                    await new Promise(r => setTimeout(r, frameMs));
-                    if (rawPlayback.ended || (endTime > 0 && rawPlayback.currentTime >= endTime - 0.01)) {
-                        if (boomerang && !pingPong) {
-                            rawPlayback.currentTime = trimStartSec;
-                            await rawPlayback.play();
-                        } else {
-                            try { rawPlayback.pause(); } catch (_) { }
-                            try { rawPlayback.currentTime = endTime; } catch (_) { }
+                const segMs = seg.duration * 1000;
+                const tStart = performance.now();
+                await new Promise((resolve) => {
+                    const rafCb = (rafTs) => {
+                        if (!isProcessing) { resolve(); return; }
+                        if (rafTs - lastRenderTs >= frameMs) {
+                            lastRenderTs = rafTs;
+                            drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
+                            drawOverlayToCanvas(ctx, canvas.width, canvas.height);
+                            if (isDateOverlayEnabled()) drawDateStamp(ctx, canvas.width, canvas.height);
+                            encodeCanvasFrame();
+                            updateProgress(processedSec + (performance.now() - tStart) / 1000);
+                            const srcEnded = rawPlayback.ended || (endTime > 0 && rawPlayback.currentTime >= endTime - 0.01);
+                            if (srcEnded) {
+                                if (boomerang && !pingPong) {
+                                    rawPlayback.currentTime = trimStartSec;
+                                    rawPlayback.play().catch(() => {});
+                                } else {
+                                    try { rawPlayback.pause(); } catch (_) {}
+                                }
+                            }
                         }
-                    }
-                }
+                        if (performance.now() - tStart < segMs) {
+                            requestAnimationFrame(rafCb);
+                        } else {
+                            resolve();
+                        }
+                    };
+                    requestAnimationFrame(rafCb);
+                });
+            }
+
+            async function renderSegmentReverse(seg) {
+                rawPlayback.pause();
+                const segMs = seg.duration * 1000;
+                const step = (frameMs / 1000) * (seg.speed || 1);
+                const tStart = performance.now();
+                await new Promise((resolve) => {
+                    const rafCb = (rafTs) => {
+                        if (!isProcessing) { resolve(); return; }
+                        if (rafTs - lastRenderTs >= frameMs) {
+                            lastRenderTs = rafTs;
+                            drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
+                            drawOverlayToCanvas(ctx, canvas.width, canvas.height);
+                            if (isDateOverlayEnabled()) drawDateStamp(ctx, canvas.width, canvas.height);
+                            encodeCanvasFrame();
+                            updateProgress(processedSec + (performance.now() - tStart) / 1000);
+                            rawPlayback.currentTime = Math.max(trimStartSec, rawPlayback.currentTime - step);
+                        }
+                        if (performance.now() - tStart < segMs && rawPlayback.currentTime > trimStartSec + 0.01) {
+                            requestAnimationFrame(rafCb);
+                        } else {
+                            resolve();
+                        }
+                    };
+                    requestAnimationFrame(rafCb);
+                });
+            }
+
+            for (const seg of plan) {
+                await renderSegmentForward(seg);
                 processedSec += seg.duration;
                 updateProgress(processedSec);
             }
@@ -4386,33 +4467,37 @@
                 const reverseStart = Math.min(dur || 0, trimStartSec + effectiveDuration);
                 if (reverseStart > 0) rawPlayback.currentTime = reverseStart;
                 for (const seg of reversePlan) {
-                    const s = performance.now();
-                    const d = seg.duration * 1000;
-                    const frameMs = renderFps > 0 ? (1000 / renderFps) : 33;
-                    const step = (frameMs / 1000) * (seg.speed || 1);
-                    while (performance.now() - s < d) {
-                        drawVideoCoverRotated(ctx, rawPlayback, canvas.width, canvas.height, getEffectiveRotateDeg(rawPlayback));
-                        drawOverlayToCanvas(ctx, canvas.width, canvas.height);
-                        if (isDateOverlayEnabled()) {
-                            drawDateStamp(ctx, canvas.width, canvas.height);
-                        }
-
-                        const segElapsed = (performance.now() - s) / 1000;
-                        updateProgress(processedSec + segElapsed);
-
-                        rawPlayback.currentTime = Math.max(trimStartSec, rawPlayback.currentTime - step);
-                        await new Promise(r => setTimeout(r, frameMs));
-                        if (rawPlayback.currentTime <= trimStartSec + 0.01) {
-                            try { rawPlayback.pause(); } catch (_) { }
-                            try { rawPlayback.currentTime = trimStartSec; } catch (_) { }
-                        }
-                    }
+                    await renderSegmentReverse(seg);
                     processedSec += seg.duration;
                     updateProgress(processedSec);
                 }
             }
-            rec.stop();
+
             rawPlayback.pause();
+
+            // Lezárás
+            if (audioReader) { try { await audioReader.cancel(); } catch (_) {} }
+            if (audioEncoder && audioEncoder.state === 'configured') {
+                try { await audioEncoder.flush(); audioEncoder.close(); } catch (_) {}
+            }
+            try { await procEncoder.flush(); procEncoder.close(); } catch (e) { console.warn('[PROC] flush:', e); }
+            procMuxer.finalize();
+
+            const outBlob = new Blob([procMuxer.target.buffer], { type: 'video/mp4' });
+            const url = URL.createObjectURL(outBlob);
+            const thumb = buildProjectorThumb();
+
+            setLastOutput(url, 'video/mp4', 'mp4', outBlob.size);
+
+            const a = document.createElement('a');
+            const now = new Date();
+            a.href = url;
+            a.download = `360_Video_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.mp4`;
+            a.click();
+
+            sendToProjector(url, thumb);
+            if (actx) actx.close();
+            resetUI();
         }
 
         function resetUI() {
@@ -4487,238 +4572,132 @@
             autoPreferMp4OnAndroid();
         }
 
-        // WebCodecs Recorder Class with MP4 Muxer
+        // Planar → interleaved audio konverzió (360.html-ből átvéve)
+        function buildInterleavedAudioData(audioData) {
+            const format = audioData.format;
+            const channels = audioData.numberOfChannels;
+            const frames = audioData.numberOfFrames;
+            const baseFormat = format.includes('planar') ? format.replace('-planar', '') : format;
+            const isF32 = baseFormat === 'f32';
+            const isS16 = baseFormat === 's16';
+            const TypedArray = isF32 ? Float32Array : (isS16 ? Int16Array : Uint8Array);
+            const out = new TypedArray(frames * channels);
+            if (format.includes('planar')) {
+                for (let ch = 0; ch < channels; ch++) {
+                    const plane = new TypedArray(frames);
+                    audioData.copyTo(plane, { planeIndex: ch });
+                    for (let i = 0; i < frames; i++) { out[i * channels + ch] = plane[i]; }
+                }
+            } else {
+                audioData.copyTo(out, { planeIndex: 0 });
+            }
+            return { format: baseFormat, data: out };
+        }
+
+        // WebCodecs Recorder — canvas-alapú felvétel (forgatás már a canvasban van)
         class WebCodecsRecorder {
-            constructor(stream, options = {}) {
-                this.stream = stream;
-                this.videoTrack = stream.getVideoTracks()[0];
+            constructor(sourceCanvas, options = {}) {
+                this.sourceCanvas = sourceCanvas;
                 this.options = options;
                 this.encoder = null;
                 this.muxer = null;
                 this.frameCounter = 0;
-                this.startTime = 0;
-                this.reader = null;
                 this.isRecording = false;
                 this.keyFrameIntervalFrames = 0;
+                this.chosenConfig = null;
+                this._rafId = 0;
+                this._baseTs = -1;
             }
 
             async start() {
-                const settings = this.videoTrack.getSettings();
-                const width = settings.width || 1280;
-                const height = settings.height || 720;
-                const framerate = settings.frameRate || 30;
-                const refBaseBitrate = Math.max(this.options.videoBitsPerSecond || 8000000, 12000000);
-                const refPixelsPerSec = 1920 * 1080 * 30;
-                const scale = (width * height * framerate) / refPixelsPerSec;
-                const minBitrate = 8000000;
-                const maxBitrate = 120000000;
-                const bitrate = Math.min(maxBitrate, Math.max(minBitrate, Math.round(refBaseBitrate * Math.max(1, scale))));
-                this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
-
+                const cv = this.sourceCanvas;
+                const width = cv.width || 720;
+                const height = cv.height || 1280;
+                const fps = this.options.fps || renderFps || 30;
+                const bitrate = Math.max(this.options.videoBitsPerSecond || 8000000, 4000000);
+                this.keyFrameIntervalFrames = Math.max(1, Math.round(fps * 2));
                 this.frameCounter = 0;
-                this.startTime = performance.now();
                 this.isRecording = true;
+                this._baseTs = -1;
 
-                // Initialize MP4 Muxer
                 this.muxer = new Mp4Muxer.Muxer({
                     target: new Mp4Muxer.ArrayBufferTarget(),
-                    video: {
-                        codec: 'avc',
-                        width,
-                        height
-                    },
+                    video: { codec: 'avc', width, height },
                     fastStart: 'in-memory'
                 });
 
-                // Configure encoder for hardware acceleration
-                const baseCandidates = (width * height >= 3840 * 2160)
-                    ? ['avc1.640033', 'avc1.640032', 'avc1.64002A', 'avc1.640029', 'avc1.4D402A', 'avc1.4D4029', 'avc1.42E02A', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E']
-                    : (width * height >= 1920 * 1080)
-                        ? ['avc1.64002A', 'avc1.4D402A', 'avc1.640029', 'avc1.4D4029', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E']
-                        : ['avc1.42E01F', 'avc1.42E01E', 'avc1.42001E'];
-                const androidPreferred = ['avc1.42001E', 'avc1.42E01E', 'avc1.42E01F'];
-                const codecCandidates = isAndroidDevice()
-                    ? [...androidPreferred, ...baseCandidates.filter((c) => !androidPreferred.includes(c))]
-                    : baseCandidates;
-                const baseConfig = {
-                    width,
-                    height,
-                    bitrate,
-                    framerate
-                };
-                const configVariants = [
-                    { ...baseConfig, bitrateMode: 'variable', latencyMode: 'quality' },
-                    { ...baseConfig, latencyMode: 'quality' },
-                    { ...baseConfig, bitrateMode: 'variable' },
-                    { ...baseConfig }
-                ];
-                const accelVariants = ['prefer-hardware', 'no-preference'];
-                let chosen = null;
-                for (const accel of accelVariants) {
-                    for (const codec of codecCandidates) {
-                        for (const variant of configVariants) {
-                            const cfg = { ...variant, codec, hardwareAcceleration: accel };
-                            const support = await VideoEncoder.isConfigSupported(cfg);
-                            if (support && support.supported) {
-                                chosen = support.config || cfg;
-                                break;
-                            }
-                        }
-                        if (chosen) break;
-                    }
-                    if (chosen) break;
-                }
-                if (!chosen) {
-                    throw new Error('No supported H.264 encoder config for current resolution.');
-                }
-                this.chosenConfig = chosen;
-
+                this.chosenConfig = await this._pickConfig(width, height, fps, bitrate);
                 this.encoder = new VideoEncoder({
-                    output: (chunk, metadata) => {
-                        // Send encoded chunk to muxer
-                        this.muxer.addVideoChunk(chunk, metadata);
+                    output: (chunk, meta) => {
+                        try { this.muxer.addVideoChunk(chunk, meta); } catch (e) { console.warn('[WebCodecs] mux:', e); }
                     },
-                    error: (e) => {
-                        console.error('[WebCodecs] Encode error:', e);
-                    }
+                    error: (e) => console.error('[WebCodecs] encode:', e)
                 });
-
-                this.encoder.configure(chosen);
-
-                // Check if MediaStreamTrackProcessor is available (Chrome only)
-                if (typeof MediaStreamTrackProcessor !== 'undefined') {
-                    // Chrome method - direct frame access
-                    const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
-                    this.reader = processor.readable.getReader();
-                    this.processFrames();
-                } else {
-                    // Safari fallback - use canvas to capture frames
-                    this.captureFramesWithCanvas(width, height, framerate);
-                }
+                this.encoder.configure(this.chosenConfig);
+                this._captureLoop(fps);
             }
 
-            async processFrames() {
-                try {
-                    while (this.isRecording) {
-                        const { done, value: frame } = await this.reader.read();
-                        if (done) break;
-
-                        if (frame && this.encoder.state === 'configured') {
-                            const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
-                            this.encoder.encode(frame, { keyFrame });
-                            this.frameCounter++;
+            async _pickConfig(width, height, framerate, bitrate) {
+                const wh = width * height;
+                const codecs = wh >= 1920 * 1080
+                    ? ['avc1.64002A', 'avc1.4D402A', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E']
+                    : ['avc1.42E01F', 'avc1.42E01E', 'avc1.42001E'];
+                const variants = [
+                    { bitrateMode: 'variable', latencyMode: 'quality' },
+                    { latencyMode: 'quality' },
+                    {}
+                ];
+                for (const accel of ['prefer-hardware', 'no-preference']) {
+                    for (const codec of codecs) {
+                        for (const v of variants) {
+                            const cfg = { ...v, codec, width, height, bitrate, framerate, hardwareAcceleration: accel };
+                            try {
+                                const s = await VideoEncoder.isConfigSupported(cfg);
+                                if (s && s.supported) return s.config || cfg;
+                            } catch (_) {}
                         }
-
-                        frame?.close();
                     }
-                } catch (e) {
-                    console.error('[WebCodecs] Frame processing error:', e);
                 }
+                throw new Error('Nincs támogatott H.264 encoder konfiguráció.');
             }
 
-            captureFramesWithCanvas(width, height, framerate) {
-                // Safari method - canvas-based frame capture
-                const video = document.createElement('video');
-                video.srcObject = this.stream;
-                video.autoplay = true;
-                video.muted = true;
-                video.playsInline = true;
-                video.setAttribute('playsinline', '');
-                video.setAttribute('webkit-playsinline', '');
-                // iOS Safari: off-screen (DOM-on kívüli) videóelem nem dekódol keretet —
-                // ezért ideiglenesen DOM-ba kell tenni, láthatatlanul
-                video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
-                document.body.appendChild(video);
-                this._captureVideo = video;
-
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-
-                const frameInterval = 1000 / framerate;
-                let lastFrameTime = 0;
-
-                const captureFrame = async (timestamp) => {
+            _captureLoop(fps) {
+                const frameMs = 1000 / fps;
+                const frameDurationUs = Math.round(1_000_000 / fps);
+                let lastTs = -Infinity;
+                const loop = (ts) => {
                     if (!this.isRecording) return;
-
-                    const elapsed = timestamp - lastFrameTime;
-                    if (elapsed >= frameInterval) {
-                        lastFrameTime = timestamp;
-
+                    if (ts - lastTs >= frameMs) {
+                        lastTs = ts;
+                        if (this._baseTs < 0) this._baseTs = ts;
+                        const adjTs = Math.max(0, Math.round((ts - this._baseTs) * 1000));
                         try {
-                            // Draw video frame to canvas
-                            ctx.drawImage(video, 0, 0, width, height);
-
-                            // Create VideoFrame from canvas (Safari-compatible method)
-                            const frame = new VideoFrame(canvas, {
-                                timestamp: this.frameCounter * (1_000_000 / framerate),
-                                duration: 1_000_000 / framerate
-                            });
-
+                            const frame = new VideoFrame(this.sourceCanvas, { timestamp: adjTs, duration: frameDurationUs });
                             if (this.encoder.state === 'configured') {
-                            const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
+                                const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
                                 this.encoder.encode(frame, { keyFrame });
                                 this.frameCounter++;
                             }
-
                             frame.close();
-                        } catch (e) {
-                            console.error('[WebCodecs] Frame capture error:', e);
-                        }
+                        } catch (e) { console.warn('[WebCodecs] frame:', e); }
                     }
-
-                    if (this.isRecording) {
-                        requestAnimationFrame(captureFrame);
-                    }
+                    this._rafId = requestAnimationFrame(loop);
                 };
-
-                video.addEventListener('loadedmetadata', () => {
-                    video.play().catch(() => {}); // iOS Safari: explicit play kell
-                    requestAnimationFrame(captureFrame);
-                });
+                this._rafId = requestAnimationFrame(loop);
             }
 
             async stop() {
                 this.isRecording = false;
-
-                // iOS Safari: DOM-ba tett capture videó takarítása
-                if (this._captureVideo) {
-                    try { this._captureVideo.pause(); } catch (_) {}
-                    try { this._captureVideo.srcObject = null; } catch (_) {}
-                    if (this._captureVideo.parentNode) {
-                        this._captureVideo.parentNode.removeChild(this._captureVideo);
-                    }
-                    this._captureVideo = null;
-                }
-
-                if (this.reader) {
-                    try {
-                        await this.reader.cancel();
-                    } catch (e) {
-                        console.error('[WebCodecs] Reader cancel error:', e);
-                    }
-                    this.reader = null;
-                }
-
+                if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = 0; }
                 if (this.encoder && this.encoder.state === 'configured') {
-                    try {
-                        await this.encoder.flush();
-                        this.encoder.close();
-                    } catch (e) {
-                        console.error('[WebCodecs] Encoder flush/close error:', e);
-                    }
+                    try { await this.encoder.flush(); this.encoder.close(); } catch (e) { console.warn('[WebCodecs] flush:', e); }
                 }
-
-                // Finalize muxer and create MP4 blob
                 if (this.muxer) {
                     this.muxer.finalize();
                     const { buffer } = this.muxer.target;
-                    console.log(`[WebCodecs] Created MP4 file: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                    console.log(`[WebCodecs] MP4: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
                     return new Blob([buffer], { type: 'video/mp4' });
                 }
-
-                console.warn('[WebCodecs] No muxer available');
                 return new Blob([], { type: 'video/mp4' });
             }
         }
@@ -4803,8 +4782,8 @@
                     setRampPreset(key);
                 });
             });
-            setAutoRampEnabled(false);
-            if (chk) chk.checked = false;
+            setRampPreset('balanced');
+            if (chk) chk.checked = true;
         })();
 
         (function initDateOverlayUI() {
@@ -4839,8 +4818,8 @@
             if (autoRampUserTouched) return;
             const chk = document.getElementById('autoRampMode');
             if (chk) {
-                chk.checked = false;
-                setAutoRampEnabled(false);
+                setRampPreset('balanced');
+                chk.checked = true;
             }
         });
 
