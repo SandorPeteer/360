@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.4</title>
+    <title>360 HW Record Minimal v1.5</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -66,7 +66,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.4 interleaved audio mux</span><br>
+                    Build: <span>v1.5 booth fullscreen volume</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -98,8 +98,8 @@
                 <input id="audioMixFile" type="file" accept="audio/*,audio/mp4,audio/x-m4a,.m4a,.mp4,.aac">
             </div>
             <div class="row">
-                <label for="mixBalance">Audio mix (mic ↔ file)</label>
-                <input id="mixBalance" type="range" min="-1" max="1" step="0.01" value="0">
+                <label for="mixBalance">Music volume</label>
+                <input id="mixBalance" type="range" min="0" max="1" step="0.01" value="1">
             </div>
             <div class="row">
                 <label for="resolution">Resolution</label>
@@ -200,7 +200,7 @@
         let audioFileName = '';
         let recordAudioCtx = null;
         let recordAudioSources = [];
-        let mixValue = 0;
+        let mixValue = 1;
         let mixGainMic = null;
         let mixGainFile = null;
         let monitorGainFile = null;
@@ -220,17 +220,20 @@
             if (audioStatus) audioStatus.textContent = msg || '-';
         }
 
-        async function requestFullscreenMode() {
-            const el = document.documentElement;
+        function requestFullscreenMode() {
+            const appEl = document.getElementById('app');
+            const targets = [appEl, document.documentElement].filter(Boolean);
             try {
                 if (document.fullscreenElement || document.webkitFullscreenElement) return true;
-                if (el.requestFullscreen) {
-                    await el.requestFullscreen();
-                    return true;
-                }
-                if (el.webkitRequestFullscreen) {
-                    el.webkitRequestFullscreen();
-                    return true;
+                for (const el of targets) {
+                    if (el.requestFullscreen) {
+                        el.requestFullscreen().catch(() => {});
+                        return true;
+                    }
+                    if (el.webkitRequestFullscreen) {
+                        el.webkitRequestFullscreen();
+                        return true;
+                    }
                 }
             } catch (_) {}
             return false;
@@ -384,9 +387,10 @@
 
         if (mixBalance) {
             mixBalance.addEventListener('input', () => {
-                mixValue = parseFloat(mixBalance.value || '0');
+                mixValue = parseFloat(mixBalance.value || '1');
                 updateMixGains();
             });
+            mixValue = parseFloat(mixBalance.value || '1');
         }
 
         function computeAlphaCrop(img) {
@@ -642,12 +646,23 @@
             await requestFullscreenMode();
             await startCamera();
         });
-        if (btnStartBooth) {
-            btnStartBooth.addEventListener('click', async () => {
-                await requestFullscreenMode();
+        let boothStartInProgress = false;
+        async function startBoothFromGesture(event) {
+            if (event) event.preventDefault();
+            if (boothStartInProgress) return;
+            boothStartInProgress = true;
+            requestFullscreenMode();
+            if (startOverlay) startOverlay.classList.add('hidden');
+            try {
                 await startCamera();
-                if (startOverlay) startOverlay.classList.add('hidden');
-            });
+            } finally {
+                boothStartInProgress = false;
+            }
+        }
+        if (btnStartBooth) {
+            btnStartBooth.addEventListener('pointerdown', startBoothFromGesture);
+            btnStartBooth.addEventListener('touchstart', startBoothFromGesture, { passive: false });
+            btnStartBooth.addEventListener('click', startBoothFromGesture);
         }
         btnRecord.addEventListener('click', async () => {
             await requestFullscreenMode();
@@ -731,12 +746,14 @@
         }
 
         function updateMixGains() {
-            const v = Math.max(-1, Math.min(1, mixValue || 0));
-            const micLevel = v <= 0 ? 1 : 1 - v;
-            const fileLevel = v >= 0 ? 1 : 1 + v;
-            if (mixGainMic) mixGainMic.gain.value = micLevel;
+            const fileLevel = Math.max(0, Math.min(1, Number(mixValue)));
+            if (mixGainMic) mixGainMic.gain.value = 0;
             if (mixGainFile) mixGainFile.gain.value = fileLevel;
             if (monitorGainFile) monitorGainFile.gain.value = fileLevel;
+        }
+
+        function getMusicVolume() {
+            return Math.max(0, Math.min(1, Number(mixValue)));
         }
 
         if (btnOpenOutput) {
@@ -1138,6 +1155,7 @@
                 const totalFrames = Math.max(1, Math.floor(durationSec * sampleRate));
                 const chunkFrames = 1024;
                 const channelData = [];
+                const musicVolume = getMusicVolume();
                 for (let ch = 0; ch < channels; ch++) {
                     channelData.push(audioBuffer.getChannelData(Math.min(ch, audioBuffer.numberOfChannels - 1)));
                 }
@@ -1148,7 +1166,7 @@
                     for (let i = 0; i < frames; i++) {
                         for (let ch = 0; ch < channels; ch++) {
                             const sourceFrame = (offset + i) % audioBuffer.length;
-                            data[i * channels + ch] = channelData[ch][sourceFrame] || 0;
+                            data[i * channels + ch] = (channelData[ch][sourceFrame] || 0) * musicVolume;
                         }
                     }
                     const audioData = new AudioData({
