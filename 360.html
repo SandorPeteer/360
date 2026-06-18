@@ -51,7 +51,7 @@
             </div>
             <div class="panel">
                 <div class="row" id="browserWarning" style="display:none; color:#b91c1c;">
-                    Chrome/Edge only • WebCodecs HW required
+                    WebCodecs HW required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
@@ -347,7 +347,6 @@
         }
 
         async function detectWebCodecsSupport() {
-            const isChromium = !!window.chrome && /Chrome|Edg/i.test(navigator.userAgent);
             const missing = [];
             if (!('VideoEncoder' in window)) missing.push('VideoEncoder');
             if (!('AudioEncoder' in window)) missing.push('AudioEncoder');
@@ -364,7 +363,7 @@
             }
             useWebCodecs = true;
             encoderStatus.textContent = 'WebCodecs HW ready';
-            if (browserWarning) browserWarning.style.display = isChromium ? 'none' : 'block';
+            if (browserWarning) browserWarning.style.display = 'none';
         }
 
         async function refreshDevices() {
