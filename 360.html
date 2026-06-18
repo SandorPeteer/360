@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v0.9</title>
+    <title>360 HW Record Minimal v1.0</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -54,7 +54,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v0.9 audio monitor</span><br>
+                    Build: <span>v1.0 file audio mux</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Actual: <span id="actualRes">-</span><br>
                     Aspect: <span id="statusAspect">-</span><br>
@@ -191,8 +191,8 @@
         const OUTPUT_WIDTH = 720;
         const OUTPUT_HEIGHT = 1280;
         const TARGET_FPS = 60;
-        const DEFAULT_OVERLAY_URL = 'overlay.png';
-        const DEFAULT_AUDIO_URL = 'music.m4a';
+        const DEFAULT_OVERLAY_URL = 'KANDO_01.png';
+        const DEFAULT_AUDIO_URL = 'Lady Gaga - Abracadabra (Dj Dark Remix) [Htz_v_xiIRc].m4a';
         let activeCameraDeviceId = '';
         let activeMicDeviceId = '';
 
@@ -538,12 +538,18 @@
             }
             let mixedTrack = null;
             const micTrack = cameraStream.getAudioTracks()[0] || null;
-            if ('AudioEncoder' in window && typeof MediaStreamTrackProcessor !== 'undefined' && (micTrack || audioFileBuffer)) {
-                mixedTrack = buildMixedAudioTrack(micTrack, audioFileBuffer);
+            const canEncodeTrackAudio = 'AudioEncoder' in window && typeof MediaStreamTrackProcessor !== 'undefined';
+            if (audioFileBuffer && !('AudioEncoder' in window)) {
+                logMsg('AudioEncoder missing, music cannot be saved into MP4.');
+            }
+            if (audioFileBuffer && !micTrack) {
+                buildMixedAudioTrack(null, audioFileBuffer);
+            } else if (canEncodeTrackAudio && micTrack) {
+                mixedTrack = buildMixedAudioTrack(micTrack, null);
                 if (!mixedTrack) {
                     logMsg('Audio unavailable, recording video only.');
                 }
-            } else if (micTrack || audioFileBuffer) {
+            } else if (micTrack && !audioFileBuffer) {
                 logMsg('Audio encoding API missing, recording video only.');
             }
             recorder = new WebCodecsRecorder(videoTrack, mixedTrack, {
@@ -551,7 +557,8 @@
                 height: canvas.height,
                 framerate: fps,
                 videoBitsPerSecond: bitrate,
-                sourceCanvas: canvas
+                sourceCanvas: canvas,
+                audioBuffer: audioFileBuffer
             });
             try {
                 await recorder.start();
@@ -853,6 +860,8 @@
                 this.chosenConfig = null;
                 this.videoBaseTs = null;
                 this.audioBaseTs = null;
+                this.startedAtMs = 0;
+                this.framerate = options.framerate || 30;
             }
 
             async start() {
@@ -864,6 +873,8 @@
                 this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
                 this.frameCounter = 0;
                 this.isRecording = true;
+                this.startedAtMs = performance.now();
+                this.framerate = framerate;
 
                 const audioInfo = this.getAudioInfo();
                 this.muxer = new Mp4Muxer.Muxer({
@@ -906,6 +917,14 @@
             }
 
             getAudioInfo() {
+                const audioBuffer = this.options.audioBuffer || null;
+                if (audioBuffer && 'AudioEncoder' in window) {
+                    return {
+                        codec: 'aac',
+                        numberOfChannels: Math.min(2, audioBuffer.numberOfChannels || 2),
+                        sampleRate: audioBuffer.sampleRate || 48000
+                    };
+                }
                 if (!this.audioTrack || !('AudioEncoder' in window) || typeof MediaStreamTrackProcessor === 'undefined') return null;
                 const settings = this.audioTrack.getSettings();
                 return {
@@ -917,6 +936,7 @@
 
             async startAudioEncoding(audioInfo) {
                 if (!audioInfo) return;
+                if (this.options.audioBuffer) return;
                 if (typeof MediaStreamTrackProcessor === 'undefined') return;
                 const bitrate = this.options.audioBitsPerSecond || 128000;
                 const config = {
@@ -1032,6 +1052,62 @@
                 }
             }
 
+            async encodeAudioBuffer(durationSec) {
+                const audioBuffer = this.options.audioBuffer || null;
+                if (!audioBuffer || !('AudioEncoder' in window)) return;
+                const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
+                const sampleRate = audioBuffer.sampleRate || 48000;
+                const bitrate = this.options.audioBitsPerSecond || 128000;
+                const config = {
+                    codec: 'mp4a.40.2',
+                    sampleRate,
+                    numberOfChannels: channels,
+                    bitrate
+                };
+                const supported = await AudioEncoder.isConfigSupported(config);
+                const finalConfig = supported && supported.supported ? (supported.config || config) : config;
+                const encoder = new AudioEncoder({
+                    output: (chunk, metadata) => {
+                        this.muxer.addAudioChunk(chunk, metadata);
+                        recBytes += chunk.byteLength || 0;
+                    },
+                    error: (e) => console.error('[WebCodecs] File audio encode error:', e)
+                });
+                encoder.configure(finalConfig);
+
+                const totalFrames = Math.min(
+                    audioBuffer.length,
+                    Math.max(1, Math.floor(durationSec * sampleRate))
+                );
+                const chunkFrames = 1024;
+                const channelData = [];
+                for (let ch = 0; ch < channels; ch++) {
+                    channelData.push(audioBuffer.getChannelData(Math.min(ch, audioBuffer.numberOfChannels - 1)));
+                }
+
+                for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
+                    const frames = Math.min(chunkFrames, totalFrames - offset);
+                    const data = new Float32Array(frames * channels);
+                    for (let i = 0; i < frames; i++) {
+                        for (let ch = 0; ch < channels; ch++) {
+                            data[i * channels + ch] = channelData[ch][offset + i] || 0;
+                        }
+                    }
+                    const audioData = new AudioData({
+                        format: 'f32',
+                        sampleRate,
+                        numberOfFrames: frames,
+                        numberOfChannels: channels,
+                        timestamp: Math.round((offset / sampleRate) * 1_000_000),
+                        data
+                    });
+                    encoder.encode(audioData);
+                    audioData.close();
+                }
+                await encoder.flush();
+                encoder.close();
+            }
+
             captureFramesWithCanvas(width, height, framerate) {
                 const canvasRef = this.sourceCanvas;
                 if (!canvasRef) {
@@ -1087,6 +1163,14 @@
                     } catch (e) {
                         console.warn('[WebCodecs] Video flush/close error:', e);
                     }
+                }
+                const durationSec = this.frameCounter > 0
+                    ? this.frameCounter / Math.max(1, this.framerate || 30)
+                    : Math.max(0.1, (performance.now() - this.startedAtMs) / 1000);
+                try {
+                    await this.encodeAudioBuffer(durationSec);
+                } catch (e) {
+                    console.error('[WebCodecs] File audio mux failed:', e);
                 }
                 if (this.audioEncoder && this.audioEncoder.state === 'configured') {
                     try {
