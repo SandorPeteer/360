@@ -14,105 +14,138 @@
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; font-family: system-ui, -apple-system, sans-serif; }
 
-        /* ── PREVIEW ── */
-        #wrap {
+        /* ── LAYOUT: canvas felül, gombok alul ── */
+        #app {
             position: fixed; inset: 0;
-            display: flex; align-items: center; justify-content: center;
-        }
-        #preview {
-            display: block;
-            /* méret JS-ből jön, de alapból tele van */
-            max-width: 100vw; max-height: 100dvh;
+            display: flex; flex-direction: column;
+            align-items: center;
         }
 
-        /* ── REC GOMB – nagy, középre lent ── */
+        /* canvas + video egy helyen, flex-grow veszi a maradék helyet */
+        #mediaWrap {
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 0;
+            width: 100%;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        #preview, #playback {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        #playback { display: none; background: #000; }
+
+        /* encoder badge – bal felső */
+        #encBadge {
+            position: absolute; top: 10px; left: 10px;
+            padding: 4px 10px; border-radius: 20px;
+            font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+            border: 1.5px solid; display: none; pointer-events: none; z-index: 5;
+        }
+        #encBadge.hw { color: #00e676; border-color: #00e676; background: rgba(0,230,118,.15); display: block; }
+        #encBadge.mr { color: #ffb300; border-color: #ffb300; background: rgba(255,179,0,.15); display: block; }
+
+        /* REC idő – jobb felső */
+        #recTime {
+            position: absolute; top: 10px; right: 10px;
+            color: #ff3b30; font-size: 13px; font-weight: 700;
+            display: none; pointer-events: none; z-index: 5;
+            background: rgba(0,0,0,.5); padding: 4px 9px; border-radius: 20px;
+        }
+        #recTime.on { display: block; }
+
+        /* ── GOMBOK SÁV alul ── */
+        #toolbar {
+            flex: 0 0 auto;
+            width: 100%;
+            padding: 14px 20px max(14px, env(safe-area-inset-bottom, 14px));
+            display: flex; align-items: center; justify-content: center; gap: 20px;
+            background: #111;
+        }
+
+        /* Beállítások gomb */
+        #btnSettings {
+            width: 52px; height: 52px; border-radius: 16px;
+            background: #222; border: 1.5px solid #333;
+            color: #fff; font-size: 22px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+
+        /* REC gomb */
         #btnRecord {
-            position: fixed;
-            bottom: max(36px, env(safe-area-inset-bottom, 36px));
-            left: 50%; transform: translateX(-50%);
-            width: 88px; height: 88px; border-radius: 50%;
-            border: 5px solid #fff;
+            width: 72px; height: 72px; border-radius: 50%;
+            border: 4px solid #fff;
             background: #e8000d;
-            cursor: pointer; z-index: 50;
-            box-shadow: 0 8px 32px rgba(232,0,13,.5);
+            cursor: pointer;
+            box-shadow: 0 6px 24px rgba(232,0,13,.5);
             transition: transform .12s, box-shadow .12s;
             display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
         }
-        #btnRecord:active { transform: translateX(-50%) scale(.9); box-shadow: 0 4px 16px rgba(232,0,13,.4); }
-        /* belső ikon – kör = record, négyzet = stop */
+        #btnRecord:active { transform: scale(.9); }
         #btnRecord::after {
             content: '';
-            width: 32px; height: 32px;
+            width: 26px; height: 26px;
             background: #fff; border-radius: 50%;
-            transition: border-radius .2s;
+            transition: border-radius .2s, width .2s, height .2s;
         }
-        #btnRecord.recording { background: #222; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
-        #btnRecord.recording::after { border-radius: 5px; width: 28px; height: 28px; }
+        #btnRecord.recording { background: #222; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+        #btnRecord.recording::after { border-radius: 5px; width: 22px; height: 22px; }
+        #btnRecord:disabled { opacity: .4; pointer-events: none; }
 
-        /* ── BEÁLLÍTÁSOK GOMB – jobb felső ── */
-        #btnSettings {
-            position: fixed;
-            top: max(18px, env(safe-area-inset-top, 18px)); right: 18px;
-            width: 48px; height: 48px; border-radius: 14px;
-            background: rgba(255,255,255,.12); border: 1.5px solid rgba(255,255,255,.25);
-            color: #fff; font-size: 22px; cursor: pointer; z-index: 50;
-            display: flex; align-items: center; justify-content: center;
+        .toolbar-spacer { width: 52px; flex-shrink: 0; }
+
+        /* ── PLAYBACK TOOLBAR – felvétel után ── */
+        #playbackBar {
+            display: none;
+            width: 100%;
+            padding: 12px 16px max(12px, env(safe-area-inset-bottom, 12px));
+            background: #111;
+            gap: 12px;
         }
-
-        /* ── ENCODER BADGE – bal felső ── */
-        #encBadge {
-            position: fixed;
-            top: max(18px, env(safe-area-inset-top, 18px)); left: 18px;
-            padding: 5px 11px; border-radius: 20px;
-            font-size: 11px; font-weight: 700; letter-spacing: .06em;
-            text-transform: uppercase; z-index: 50;
-            border: 1.5px solid; display: none;
+        #playbackBar.on { display: flex; }
+        .pb-btn {
+            flex: 1; height: 54px; border-radius: 14px; border: none;
+            font-size: 16px; font-weight: 800; cursor: pointer; letter-spacing: .03em;
         }
-        #encBadge.hw  { color: #00e676; border-color: #00e676; background: rgba(0,230,118,.12); display: block; }
-        #encBadge.mr  { color: #ffb300; border-color: #ffb300; background: rgba(255,179,0,.12); display: block; }
+        #btnDownload { background: linear-gradient(135deg,#00c853,#00e676); color: #000; }
+        #btnClear    { background: #222; color: #eee; border: 1.5px solid #333; }
 
-        /* ── STATUS SZÖVEG – alul középen a REC gomb felett ── */
-        #statusText {
-            position: fixed;
-            bottom: calc(max(36px, env(safe-area-inset-bottom, 36px)) + 100px);
-            left: 50%; transform: translateX(-50%);
-            color: rgba(255,255,255,.75); font-size: 14px; font-weight: 600;
-            letter-spacing: .04em; text-align: center;
-            white-space: nowrap; z-index: 50; pointer-events: none;
+        /* ── START OVERLAY ── */
+        #startOverlay {
+            position: fixed; inset: 0; z-index: 50;
+            background: #0a0a0a;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 20px;
+        }
+        #startOverlay.gone { display: none; }
+        #startOverlay h1 {
+            font-size: clamp(28px, 7vw, 48px); font-weight: 900;
+            color: #fff; letter-spacing: .1em; text-transform: uppercase; text-align: center;
+        }
+        #startOverlay p { color: #666; font-size: 14px; }
+        #btnStart {
+            width: min(320px, 80vw); height: 72px;
+            border-radius: 20px; border: none;
+            background: linear-gradient(135deg, #e8000d, #ff4500);
+            color: #fff; font-size: 22px; font-weight: 900;
+            letter-spacing: .06em; cursor: pointer;
+            box-shadow: 0 10px 36px rgba(232,0,13,.4);
         }
 
         /* ── VISSZASZÁMLÁLÁS ── */
         #countdown {
-            position: fixed; inset: 0; z-index: 80; pointer-events: none;
+            position: fixed; inset: 0; z-index: 40; pointer-events: none;
             display: flex; align-items: center; justify-content: center;
-            font-size: 38vw; font-weight: 900; color: #fff;
+            font-size: min(50vw, 50vh); font-weight: 900; color: #fff;
             text-shadow: 0 0 80px rgba(0,0,0,.9);
-            opacity: 0; transition: opacity .15s;
+            opacity: 0; transition: opacity .1s;
         }
         #countdown.on { opacity: 1; }
-
-        /* ── START OVERLAY ── */
-        #startOverlay {
-            position: fixed; inset: 0; z-index: 100;
-            background: #0a0a0a;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center; gap: 24px;
-        }
-        #startOverlay.gone { display: none; }
-        #startOverlay h1 {
-            font-size: clamp(26px, 6vw, 42px); font-weight: 900;
-            color: #fff; letter-spacing: .08em; text-transform: uppercase;
-            text-align: center;
-        }
-        #startOverlay p { color: #888; font-size: 15px; text-align: center; }
-        #btnStart {
-            width: min(340px, 82vw); height: 76px;
-            border-radius: 20px; border: none;
-            background: linear-gradient(135deg, #e8000d, #ff4d00);
-            color: #fff; font-size: 24px; font-weight: 900;
-            letter-spacing: .06em; cursor: pointer;
-            box-shadow: 0 12px 40px rgba(232,0,13,.45);
-        }
 
         /* ── SETTINGS DRAWER ── */
         #settingsBackdrop {
@@ -122,86 +155,69 @@
         #settingsBackdrop.on { opacity: 1; pointer-events: auto; }
         #settingsDrawer {
             position: fixed; top: 0; right: -110%;
-            width: min(360px, 92vw); height: 100dvh;
+            width: min(340px, 92vw); height: 100dvh;
             background: #141414; color: #eee;
-            z-index: 70; padding: 24px 20px;
+            z-index: 70; padding: 20px 18px;
             overflow-y: auto; transition: right .25s ease;
         }
         #settingsDrawer.on { right: 0; }
         #settingsDrawer h2 {
-            font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
-            color: #00e676; margin-bottom: 20px;
+            font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+            color: #00e676; margin-bottom: 18px;
         }
         #btnCloseSettings {
             float: right; background: transparent;
             border: 1.5px solid #333; color: #eee;
-            width: 34px; height: 34px; border-radius: 10px;
-            font-size: 18px; cursor: pointer; margin-top: -4px;
+            width: 32px; height: 32px; border-radius: 10px;
+            font-size: 16px; cursor: pointer; margin-top: -2px;
             display: flex; align-items: center; justify-content: center;
         }
-        .srow { margin-bottom: 16px; }
+        .srow { margin-bottom: 14px; }
         .srow label {
-            display: block; font-size: 10px; color: #666;
-            text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; font-weight: 700;
+            display: block; font-size: 10px; color: #555;
+            text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; font-weight: 700;
         }
         .srow select, .srow input[type="file"], .srow input[type="number"] {
-            width: 100%; padding: 9px 10px; border-radius: 10px;
+            width: 100%; padding: 8px 10px; border-radius: 10px;
             border: 1.5px solid #2a2a2a; background: #1e1e1e; color: #eee;
             font-size: 13px; appearance: none; -webkit-appearance: none;
         }
-        #sLog { font-size: 11px; color: #555; margin-top: 12px; line-height: 1.6; min-height: 16px; }
-
-        /* ── KÉSZ VIDEÓ UI ── */
-        #doneOverlay {
-            position: fixed; inset: 0; z-index: 90;
-            background: rgba(0,0,0,.92);
-            display: none; flex-direction: column;
-            align-items: center; justify-content: center; gap: 18px;
-        }
-        #doneOverlay.on { display: flex; }
-        #doneOverlay h2 { color: #fff; font-size: 22px; font-weight: 800; }
-        #doneOverlay p  { color: #888; font-size: 13px; }
-        .done-btn {
-            width: min(300px, 80vw); height: 60px; border-radius: 16px; border: none;
-            font-size: 18px; font-weight: 800; cursor: pointer; letter-spacing: .04em;
-        }
-        #btnDownload { background: linear-gradient(135deg,#00c853,#00e676); color: #000; }
-        #btnNewRec    { background: #1e1e1e; color: #eee; border: 1.5px solid #333; }
+        #sLog { font-size: 11px; color: #444; margin-top: 10px; line-height: 1.7; }
     </style>
 </head>
 <body>
+<div id="app">
+    <div id="mediaWrap">
+        <div id="encBadge"></div>
+        <div id="recTime"></div>
+        <canvas id="preview"></canvas>
+        <video id="playback" playsinline controls></video>
+    </div>
 
-<!-- PREVIEW CANVAS -->
-<div id="wrap"><canvas id="preview"></canvas></div>
+    <div id="toolbar">
+        <div class="toolbar-spacer"></div>
+        <button id="btnRecord" disabled></button>
+        <button id="btnSettings">⚙️</button>
+    </div>
 
-<!-- FIXED UI -->
-<div id="encBadge">HW H.264</div>
-<div id="statusText"></div>
-<div id="countdown"></div>
-<button id="btnRecord"></button>
-<button id="btnSettings">⚙️</button>
+    <div id="playbackBar">
+        <button class="pb-btn" id="btnDownload">⬇️ Mentés</button>
+        <button class="pb-btn" id="btnClear">🔴 Új felvétel</button>
+    </div>
+</div>
 
-<!-- START OVERLAY -->
 <div id="startOverlay">
     <h1>KANDÓ<br>360 BOOTH</h1>
-    <p>Nyomj a gombra a kamera indításához</p>
+    <p>Érintsd meg a gombot a kamera indításához</p>
     <button id="btnStart">INDÍTÁS</button>
 </div>
 
-<!-- KÉSZ VIDEÓ -->
-<div id="doneOverlay">
-    <h2>✅ Felvétel kész!</h2>
-    <p id="doneInfo"></p>
-    <button class="done-btn" id="btnDownload">⬇️ LETÖLTÉS</button>
-    <button class="done-btn" id="btnNewRec">🔴 ÚJ FELVÉTEL</button>
-</div>
+<div id="countdown"></div>
 
-<!-- SETTINGS DRAWER -->
 <div id="settingsBackdrop"></div>
 <div id="settingsDrawer">
     <button id="btnCloseSettings">✕</button>
     <h2>Beállítások</h2>
-
     <div class="srow">
         <label>Kamera</label>
         <select id="camSelect"></select>
@@ -212,11 +228,20 @@
     </div>
     <div class="srow">
         <label>Zene (alap: beégetett .m4a)</label>
-        <input type="file" id="musicFile" accept="audio/*,.m4a,.mp3,.aac">
+        <input type="file" id="audioMixFile" accept="audio/*,.m4a,.mp3,.aac">
     </div>
     <div class="srow">
-        <label>Visszaszámlálás (másodperc)</label>
+        <label>Visszaszámlálás (mp)</label>
         <input type="number" id="inputCountdown" value="3" min="0" max="10">
+    </div>
+    <div class="srow">
+        <label>Codec</label>
+        <select id="codecSelect">
+            <option value="auto" selected>Auto (legjobb)</option>
+            <option value="h264-high">H.264 High</option>
+            <option value="h264-main">H.264 Main</option>
+            <option value="h264-base">H.264 Baseline</option>
+        </select>
     </div>
     <div id="sLog"></div>
 </div>
@@ -224,86 +249,148 @@
 <script>
 'use strict';
 
-// ── KONFIG ────────────────────────────────────────────────────────────────────
-const OUT_W        = 720;
-const OUT_H        = 1280;
-const TARGET_FPS   = 60;
-const DEFAULT_OVERLAY = 'KANDO_01.png';
-const DEFAULT_AUDIO   = 'Lady Gaga - Abracadabra (Dj Dark Remix) [Htz_v_xiIRc].m4a';
+const OUTPUT_WIDTH  = 720;
+const OUTPUT_HEIGHT = 1280;
+const TARGET_FPS    = 60;
+const DEFAULT_OVERLAY_URL = 'KANDO_01.png';
+const DEFAULT_AUDIO_URL   = 'Lady Gaga - Abracadabra (Dj Dark Remix) [Htz_v_xiIRc].m4a';
 
-// ── ÁLLAPOT ───────────────────────────────────────────────────────────────────
-let cameraStream  = null;
-let isRecording   = false;
-let useHW         = false;   // WebCodecs VideoEncoder elérhető
-let hwRecorder    = null;    // HW: { encoder, muxer, rafId }
-let mrRecorder    = null;    // SW fallback: MediaRecorder
-let mrChunks      = [];
-let audioBuffer   = null;
-let audioFileName = '';
-let recAudioCtx   = null;
-let recAudioSrcs  = [];
-let drawRafId     = 0;
-let cdTimer       = null;
-let lastBlob      = null;
-let lastExt       = 'mp4';
-let recBytes      = 0;
-
-const overlayImg = new Image();
-let overlayReady = false;
-
-// ── DOM ───────────────────────────────────────────────────────────────────────
-const canvas          = document.getElementById('preview');
-const ctx             = canvas.getContext('2d', { alpha: false });
-const btnRecord       = document.getElementById('btnRecord');
-const btnSettings     = document.getElementById('btnSettings');
-const btnStart        = document.getElementById('btnStart');
-const startOverlay    = document.getElementById('startOverlay');
-const countdown       = document.getElementById('countdown');
-const statusText      = document.getElementById('statusText');
-const encBadge        = document.getElementById('encBadge');
-const settingsBackdrop= document.getElementById('settingsBackdrop');
-const settingsDrawer  = document.getElementById('settingsDrawer');
-const btnCloseSettings= document.getElementById('btnCloseSettings');
-const camSelect       = document.getElementById('camSelect');
-const overlayFile     = document.getElementById('overlayFile');
-const musicFile       = document.getElementById('musicFile');
-const inputCountdown  = document.getElementById('inputCountdown');
-const sLog            = document.getElementById('sLog');
-const doneOverlay     = document.getElementById('doneOverlay');
-const doneInfo        = document.getElementById('doneInfo');
-const btnDownload     = document.getElementById('btnDownload');
-const btnNewRec       = document.getElementById('btnNewRec');
+const preview          = document.getElementById('preview');
+const canvas           = preview;
+const ctx2d            = canvas.getContext('2d');
+const playback         = document.getElementById('playback');
+const encBadge         = document.getElementById('encBadge');
+const recTimeEl        = document.getElementById('recTime');
+const toolbar          = document.getElementById('toolbar');
+const playbackBar      = document.getElementById('playbackBar');
+const btnRecord        = document.getElementById('btnRecord');
+const btnSettings      = document.getElementById('btnSettings');
+const btnStart         = document.getElementById('btnStart');
+const startOverlay     = document.getElementById('startOverlay');
+const countdownEl      = document.getElementById('countdown');
+const settingsBackdrop = document.getElementById('settingsBackdrop');
+const settingsDrawer   = document.getElementById('settingsDrawer');
+const btnCloseSettings = document.getElementById('btnCloseSettings');
+const camSelect        = document.getElementById('camSelect');
+const overlayFile      = document.getElementById('overlayFile');
+const audioMixFile     = document.getElementById('audioMixFile');
+const inputCountdown   = document.getElementById('inputCountdown');
+const codecSelect      = document.getElementById('codecSelect');
+const sLog             = document.getElementById('sLog');
+const btnDownload      = document.getElementById('btnDownload');
+const btnClear         = document.getElementById('btnClear');
 
 const liveVideo = Object.assign(document.createElement('video'), {
     autoplay: true, muted: true, playsInline: true
 });
 
-// ── LOG ───────────────────────────────────────────────────────────────────────
-function log(msg) { sLog.textContent = msg; console.log('[booth]', msg); }
-function setStatus(msg) { statusText.textContent = msg; }
+let cameraStream          = null;
+let useWebCodecs          = false;
+let isRecording           = false;
+let recorder              = null;
+let mediaRecorderFallback = null;
+let mediaRecorderChunks   = [];
+let activeCanvasStream    = null;
+let currentBlobUrl        = null;
+let currentBlobExt        = 'mp4';
+let drawRaf               = 0;
+let lastDraw              = 0;
+let previewFps            = 30;
+let recStartMs            = 0;
+let recBytes              = 0;
+let recTimerIv            = 0;
+let cdTimer               = null;
+let activeCameraDeviceId  = '';
 
-// ── CANVAS MÉRET + FIT ────────────────────────────────────────────────────────
-function fitPreview() {
-    canvas.width  = OUT_W;
-    canvas.height = OUT_H;
-    const s = Math.min(window.innerWidth / OUT_W, window.innerHeight / OUT_H);
-    canvas.style.width  = OUT_W * s + 'px';
-    canvas.style.height = OUT_H * s + 'px';
+const overlayImg = new Image();
+let overlayReady = false;
+let overlayCrop  = null;
+
+let audioFileBuffer    = null;
+let audioFileName      = '';
+let recordAudioCtx     = null;
+let recordAudioSources = [];
+let mixGainFile        = null;
+let monitorGainFile    = null;
+
+function log(msg) { sLog.textContent = msg; console.log('[booth]', msg); }
+
+function fitCanvas() {
+    canvas.width  = OUTPUT_WIDTH;
+    canvas.height = OUTPUT_HEIGHT;
+    const wrap = document.getElementById('mediaWrap');
+    const aw = wrap.clientWidth;
+    const ah = wrap.clientHeight;
+    const scale = Math.min(aw / OUTPUT_WIDTH, ah / OUTPUT_HEIGHT);
+    const cw = OUTPUT_WIDTH  * scale;
+    const ch = OUTPUT_HEIGHT * scale;
+    canvas.style.width    = cw + 'px';
+    canvas.style.height   = ch + 'px';
+    playback.style.width  = cw + 'px';
+    playback.style.height = ch + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+
+function computeAlphaCrop(img) {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cc = c.getContext('2d');
+    cc.drawImage(img, 0, 0);
+    const d = cc.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (d[(y * w + x) * 4 + 3] > 0) {
+            if (x < minX) minX = x; if (y < minY) minY = y;
+            if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+        }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    return { sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1 };
 }
 
-// ── OVERLAY ───────────────────────────────────────────────────────────────────
-function loadOverlay(src, label) {
-    overlayReady = false;
-    overlayImg.onload  = () => { overlayReady = true;  log('Overlay: ' + label); };
-    overlayImg.onerror = () => { overlayReady = false; log('Overlay nem töltött: ' + label); };
+function setOverlaySource(src, label) {
+    overlayReady = false; overlayCrop = null;
+    overlayImg.onload  = () => { overlayCrop = computeAlphaCrop(overlayImg); overlayReady = true; log('Overlay: ' + label); };
+    overlayImg.onerror = () => { overlayReady = false; log('Overlay nem tölt: ' + label); };
     overlayImg.src = src;
 }
 
-// ── AUDIO ─────────────────────────────────────────────────────────────────────
-async function decodeAudio(ab, label) {
+function drawFrame() {
+    if (!cameraStream || liveVideo.readyState < 2) return;
+    const vw = liveVideo.videoWidth || OUTPUT_WIDTH;
+    const vh = liveVideo.videoHeight || OUTPUT_HEIGHT;
+    const scale = Math.max(OUTPUT_WIDTH / vw, OUTPUT_HEIGHT / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx2d.fillStyle = '#000';
+    ctx2d.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+    ctx2d.drawImage(liveVideo, (OUTPUT_WIDTH - dw) / 2, (OUTPUT_HEIGHT - dh) / 2, dw, dh);
+    if (overlayReady && overlayImg.naturalWidth) {
+        if (overlayCrop) {
+            ctx2d.drawImage(overlayImg,
+                overlayCrop.sx, overlayCrop.sy, overlayCrop.sw, overlayCrop.sh,
+                0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        } else {
+            ctx2d.drawImage(overlayImg, 0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        }
+    }
+}
+
+function startDrawLoop() {
+    if (drawRaf) return;
+    const loop = (ts) => {
+        const ms = 1000 / Math.max(1, previewFps);
+        if (ts - lastDraw >= ms) { lastDraw = ts; drawFrame(); }
+        drawRaf = requestAnimationFrame(loop);
+    };
+    drawRaf = requestAnimationFrame(loop);
+}
+function stopDrawLoop() { if (drawRaf) { cancelAnimationFrame(drawRaf); drawRaf = 0; } }
+
+async function decodeAudioArrayBuffer(ab, label) {
     const tmp = new (window.AudioContext || window.webkitAudioContext)();
     try {
-        audioBuffer   = await tmp.decodeAudioData(ab);
+        audioFileBuffer = await tmp.decodeAudioData(ab);
         audioFileName = label;
         log('Zene: ' + label);
     } catch(e) { log('Zene dekód hiba: ' + e.message); }
@@ -312,65 +399,216 @@ async function decodeAudio(ab, label) {
 
 async function loadDefaultAudio() {
     try {
-        const r = await fetch(DEFAULT_AUDIO + '?v=' + Date.now(), { cache: 'no-store' });
+        const r = await fetch(DEFAULT_AUDIO_URL + '?v=' + Date.now(), { cache: 'no-store' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        await decodeAudio(await r.arrayBuffer(), DEFAULT_AUDIO);
+        await decodeAudioArrayBuffer(await r.arrayBuffer(), DEFAULT_AUDIO_URL);
     } catch(e) { log('Alapzene nem tölt: ' + e.message); }
 }
 
-// audio track a felvételhez (loop, dest)
-function buildAudioTrack() {
-    stopAudio();
-    if (!audioBuffer) return null;
-    recAudioCtx     = new (window.AudioContext || window.webkitAudioContext)();
-    const dest      = recAudioCtx.createMediaStreamDestination();
-    const src       = recAudioCtx.createBufferSource();
-    src.buffer      = audioBuffer;
-    src.loop        = true;
-    src.connect(dest);
-    recAudioSrcs    = [src];
+function buildMixedAudioTrack(micTrack, fileBuffer) {
+    stopAudioMix();
+    recordAudioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+    const dest      = recordAudioCtx.createMediaStreamDestination();
+    recordAudioSources = [];
+    mixGainFile     = recordAudioCtx.createGain(); mixGainFile.gain.value = 1;
+    monitorGainFile = recordAudioCtx.createGain(); monitorGainFile.gain.value = fileBuffer ? 1 : 0;
+    if (micTrack) {
+        const ms  = new MediaStream([micTrack]);
+        const src = recordAudioCtx.createMediaStreamSource(ms);
+        src.connect(dest);
+        recordAudioSources.push(src);
+    }
+    if (fileBuffer) {
+        const src = recordAudioCtx.createBufferSource();
+        src.buffer = fileBuffer; src.loop = true;
+        src.connect(mixGainFile);
+        src.connect(monitorGainFile);
+        mixGainFile.connect(dest);
+        monitorGainFile.connect(recordAudioCtx.destination);
+        recordAudioSources.push(src);
+    }
     return dest.stream.getAudioTracks()[0] || null;
 }
-function startAudio() {
-    if (!recAudioCtx) return;
-    if (recAudioCtx.state === 'suspended') recAudioCtx.resume().catch(() => {});
-    recAudioSrcs.forEach(s => { try { s.start(0); } catch(_) {} });
-}
-function stopAudio() {
-    recAudioSrcs.forEach(s => { try { s.stop(); } catch(_) {} });
-    recAudioSrcs = [];
-    if (recAudioCtx) { try { recAudioCtx.close(); } catch(_) {} recAudioCtx = null; }
+
+function startAudioMixPlayback() {
+    if (!recordAudioCtx) return;
+    if (recordAudioCtx.state === 'suspended') recordAudioCtx.resume().catch(() => {});
+    recordAudioSources.forEach(s => { try { s.start(0); } catch(_) {} });
 }
 
-// ── DRAW LOOP ─────────────────────────────────────────────────────────────────
-function drawFrame() {
-    if (!cameraStream || liveVideo.readyState < 2) return;
-    // cover: kitölti 720×1280-at, levágja ami kilóg
-    const vw = liveVideo.videoWidth  || OUT_W;
-    const vh = liveVideo.videoHeight || OUT_H;
-    const scale = Math.max(OUT_W / vw, OUT_H / vh);
-    const dw = vw * scale, dh = vh * scale;
-    ctx.drawImage(liveVideo, (OUT_W - dw) / 2, (OUT_H - dh) / 2, dw, dh);
-    if (overlayReady && overlayImg.naturalWidth) {
-        ctx.drawImage(overlayImg, 0, 0, OUT_W, OUT_H);
+function stopAudioMix() {
+    recordAudioSources.forEach(s => { try { s.stop(0); } catch(_) {} });
+    recordAudioSources = [];
+    mixGainFile = null; monitorGainFile = null;
+    if (recordAudioCtx) { try { recordAudioCtx.close(); } catch(_) {} recordAudioCtx = null; }
+}
+
+async function detectWebCodecsSupport() {
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window) || typeof Mp4Muxer === 'undefined') {
+        useWebCodecs = false;
+        encBadge.textContent = 'MediaRec'; encBadge.className = 'mr';
+        return;
+    }
+    useWebCodecs = true;
+    encBadge.textContent = 'HW H.264'; encBadge.className = 'hw';
+}
+
+function pickMediaRecorderMime() {
+    const candidates = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1.42E01E',
+        'video/mp4',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm'
+    ];
+    if (!window.MediaRecorder?.isTypeSupported) return { mime: 'video/mp4', ext: 'mp4' };
+    for (const mime of candidates) {
+        try { if (MediaRecorder.isTypeSupported(mime)) return { mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' }; } catch(_) {}
+    }
+    return { mime: 'video/mp4', ext: 'mp4' };
+}
+
+async function startRecordingMediaRecorder(fps, bitrate) {
+    const musicTrack = audioFileBuffer ? buildMixedAudioTrack(null, audioFileBuffer) : null;
+    const canvasStream = canvas.captureStream(fps);
+    if (musicTrack) canvasStream.addTrack(musicTrack);
+    activeCanvasStream = canvasStream;
+    const { mime, ext } = pickMediaRecorderMime();
+    currentBlobExt = ext;
+    let mr;
+    try { mr = new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: bitrate }); }
+    catch(_) { mr = new MediaRecorder(canvasStream); }
+    mediaRecorderChunks = [];
+    mr.ondataavailable = e => { if (e.data?.size > 0) { mediaRecorderChunks.push(e.data); recBytes += e.data.size; } };
+    mr.onstop = () => {
+        const blob = new Blob(mediaRecorderChunks, { type: mime });
+        mediaRecorderChunks = [];
+        handleRecordingComplete(blob, ext);
+    };
+    mr.start(500);
+    mediaRecorderFallback = mr;
+    startAudioMixPlayback();
+    encBadge.textContent = 'MediaRec'; encBadge.className = 'mr';
+    log('MediaRecorder: ' + mime);
+}
+
+async function startRecording() {
+    if (!cameraStream) return;
+    clearOutput();
+    const track    = cameraStream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    fitCanvas();
+    const fps     = settings.frameRate || 30;
+    const bitrate = Math.max(8_000_000, Math.round(canvas.width * canvas.height * fps * 0.07));
+
+    isRecording = true;
+    recBytes    = 0;
+    recStartMs  = performance.now();
+    startRecTimer();
+
+    const hasAudioEncoder = ('AudioEncoder' in window) && (typeof MediaStreamTrackProcessor !== 'undefined');
+    if (!useWebCodecs || !hasAudioEncoder) {
+        log(!useWebCodecs ? 'WebCodecs N/A – MediaRecorder' : 'Nincs AudioEncoder – MediaRecorder (hanggal)');
+        await startRecordingMediaRecorder(fps, bitrate);
+        btnRecord.classList.add('recording');
+        return;
+    }
+
+    const musicTrack = audioFileBuffer ? buildMixedAudioTrack(null, audioFileBuffer) : null;
+    recorder = new WebCodecsRecorder(track, musicTrack, {
+        width: canvas.width, height: canvas.height,
+        framerate: fps, videoBitsPerSecond: bitrate,
+        sourceCanvas: canvas, codecSelect
+    });
+    try {
+        await recorder.start();
+        startAudioMixPlayback();
+        encBadge.textContent = 'HW ' + (recorder.chosenConfig?.codec || 'avc1');
+        encBadge.className = 'hw';
+    } catch(e) {
+        log('WebCodecs hiba – MediaRecorder fallback');
+        recorder = null;
+        await startRecordingMediaRecorder(fps, bitrate);
+    }
+    btnRecord.classList.add('recording');
+}
+
+async function stopRecording() {
+    if (!isRecording) return;
+    isRecording = false;
+    stopRecTimer();
+    btnRecord.classList.remove('recording');
+
+    if (mediaRecorderFallback) {
+        try { mediaRecorderFallback.stop(); } catch(_) {}
+        mediaRecorderFallback = null;
+        if (activeCanvasStream) { activeCanvasStream.getTracks().forEach(t => t.stop()); activeCanvasStream = null; }
+        stopAudioMix();
+    } else if (recorder) {
+        log('Mentés...');
+        try {
+            const blob = await recorder.stop();
+            handleRecordingComplete(blob, 'mp4');
+        } catch(e) { log('Stop hiba: ' + e.message); }
+        recorder = null;
+        stopAudioMix();
     }
 }
-function startDraw() {
-    if (drawRafId) return;
-    const loop = () => { drawFrame(); drawRafId = requestAnimationFrame(loop); };
-    drawRafId = requestAnimationFrame(loop);
-}
-function stopDraw() { if (drawRafId) { cancelAnimationFrame(drawRafId); drawRafId = 0; } }
 
-// ── KAMERA ────────────────────────────────────────────────────────────────────
+function handleRecordingComplete(blob, ext) {
+    if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+    currentBlobUrl = URL.createObjectURL(blob);
+    currentBlobExt = ext;
+    canvas.style.display   = 'none';
+    playback.style.display = 'block';
+    playback.src           = currentBlobUrl;
+    playback.load();
+    toolbar.style.display  = 'none';
+    playbackBar.classList.add('on');
+    recTimeEl.classList.remove('on');
+    log('Kész: ' + (blob.size / 1024 / 1024).toFixed(1) + ' MB');
+}
+
+function clearOutput() {
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+    playback.removeAttribute('src');
+    playback.style.display = 'none';
+    canvas.style.display   = 'block';
+    toolbar.style.display  = 'flex';
+    playbackBar.classList.remove('on');
+    recTimeEl.classList.remove('on');
+}
+
+function startRecTimer() {
+    recTimeEl.classList.add('on');
+    clearInterval(recTimerIv);
+    recTimerIv = setInterval(() => {
+        const s = Math.floor((performance.now() - recStartMs) / 1000);
+        const m = Math.floor(s / 60);
+        recTimeEl.textContent = '● ' + String(m).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+    }, 500);
+}
+function stopRecTimer() { clearInterval(recTimerIv); recTimerIv = 0; }
+
+function runCountdown(sec, cb) {
+    if (sec <= 0) { cb(); return; }
+    let n = sec;
+    countdownEl.textContent = n; countdownEl.classList.add('on');
+    cdTimer = setInterval(() => {
+        n--;
+        if (n <= 0) { clearInterval(cdTimer); cdTimer = null; countdownEl.classList.remove('on'); cb(); }
+        else countdownEl.textContent = n;
+    }, 1000);
+}
+
 async function startCamera() {
     if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
     const camId = camSelect.value;
     try {
         cameraStream = await navigator.mediaDevices.getUserMedia({
             video: {
-                width:     { ideal: 1920 },
-                height:    { ideal: 1080 },
+                width: { ideal: 1920 }, height: { ideal: 1080 },
                 frameRate: { ideal: TARGET_FPS, min: 30 },
                 ...(camId ? { deviceId: { exact: camId } } : { facingMode: 'user' })
             },
@@ -381,15 +619,15 @@ async function startCamera() {
     liveVideo.srcObject = cameraStream;
     try { await liveVideo.play(); } catch(_) {}
 
-    // próbáljuk 60fps-re csavarni
     const track = cameraStream.getVideoTracks()[0];
     if (track?.applyConstraints) {
         try { await track.applyConstraints({ frameRate: { ideal: TARGET_FPS } }); } catch(_) {}
     }
     const s = track?.getSettings?.() || {};
-    log(`Kamera: ${s.width}×${s.height} @ ${Math.round(s.frameRate||30)}fps`);
-    fitPreview();
-    startDraw();
+    previewFps = s.frameRate || 30;
+    log('Kamera: ' + s.width + 'x' + s.height + ' @ ' + Math.round(previewFps) + 'fps');
+    fitCanvas();
+    startDrawLoop();
     btnRecord.disabled = false;
     return true;
 }
@@ -402,324 +640,22 @@ async function refreshCams() {
     devs.filter(d => d.kind === 'videoinput').forEach((d, i) => {
         const o = document.createElement('option');
         o.value = d.deviceId;
-        o.textContent = d.label || `Kamera ${i+1}`;
+        o.textContent = d.label || 'Kamera ' + (i+1);
         camSelect.appendChild(o);
     });
     if (prev && [...camSelect.options].some(o => o.value === prev)) camSelect.value = prev;
 }
 
-// ── WEBCODECS DETEKTÁLÁS ──────────────────────────────────────────────────────
-async function detectHW() {
-    if (!('VideoEncoder' in window) || !('VideoFrame' in window) || typeof Mp4Muxer === 'undefined') {
-        useHW = false; return;
-    }
-    // Teszteljük hogy tényleg megy-e a HW encoder
-    const cfg = {
-        codec: 'avc1.64002A', width: OUT_W, height: OUT_H,
-        framerate: TARGET_FPS, bitrate: 12_000_000,
-        hardwareAcceleration: 'prefer-hardware'
-    };
-    try {
-        const r = await VideoEncoder.isConfigSupported(cfg);
-        useHW = !!(r?.supported);
-    } catch(_) { useHW = false; }
-
-    if (useHW) {
-        encBadge.textContent = 'HW H.264';
-        encBadge.className   = 'hw';
-    } else {
-        encBadge.textContent = 'SW MediaRec';
-        encBadge.className   = 'mr';
-    }
-}
-
-// ── HW FELVÉTEL (WebCodecs + mp4-muxer) ──────────────────────────────────────
-async function pickVideoConfig() {
-    const profiles = [
-        // High profile – legjobb minőség, iPad A13 simán bírja
-        'avc1.64002A', 'avc1.640029', 'avc1.64001F',
-        // Main profile fallback
-        'avc1.4D402A', 'avc1.4D4029',
-        // Baseline végső fallback
-        'avc1.42E02A', 'avc1.42E01E'
-    ];
-    const base = {
-        width: OUT_W, height: OUT_H,
-        framerate: TARGET_FPS, bitrate: 12_000_000,
-        bitrateMode: 'variable', latencyMode: 'quality'
-    };
-    for (const accel of ['prefer-hardware', 'no-preference']) {
-        for (const codec of profiles) {
-            const cfg = { ...base, codec, hardwareAcceleration: accel };
-            try {
-                const r = await VideoEncoder.isConfigSupported(cfg);
-                if (r?.supported) return r.config || cfg;
-            } catch(_) {}
-        }
-    }
-    throw new Error('Nincs támogatott H.264 konfig');
-}
-
-async function startHW(audioTrack) {
-    const cfg = await pickVideoConfig();
-
-    // audio info a muxerhez – csak ha van AudioEncoder (Chrome)
-    const hasAudioEnc = ('AudioEncoder' in window) && (typeof MediaStreamTrackProcessor !== 'undefined');
-    const audioInfo = (hasAudioEnc && audioTrack) ? {
-        codec: 'aac',
-        numberOfChannels: audioTrack.getSettings().channelCount || 2,
-        sampleRate: audioTrack.getSettings().sampleRate || 48000
-    } : null;
-
-    const muxer = new Mp4Muxer.Muxer({
-        target: new Mp4Muxer.ArrayBufferTarget(),
-        video: { codec: 'avc', width: OUT_W, height: OUT_H },
-        ...(audioInfo ? { audio: audioInfo } : {}),
-        fastStart: 'in-memory'
-    });
-
-    let frameCount = 0;
-    const keyInterval = Math.round(TARGET_FPS * 2);
-
-    const encoder = new VideoEncoder({
-        output: (chunk, meta) => {
-            try {
-                let m = meta;
-                if (m?.decoderConfig?.colorSpace == null && m?.decoderConfig) {
-                    m = { ...m, decoderConfig: { ...m.decoderConfig } };
-                    delete m.decoderConfig.colorSpace;
-                }
-                muxer.addVideoChunk(chunk, m);
-                recBytes += chunk.byteLength || 0;
-            } catch(e) { console.warn('[HW] muxer video err:', e); }
-        },
-        error: e => console.error('[HW] encode err:', e)
-    });
-    encoder.configure(cfg);
-
-    // Audio encoder – csak Chromeon
-    let audioEncoder = null;
-    let audioReader  = null;
-    if (audioInfo && hasAudioEnc && audioTrack) {
-        const audioCfg = {
-            codec: 'mp4a.40.2',
-            sampleRate: audioInfo.sampleRate,
-            numberOfChannels: audioInfo.numberOfChannels,
-            bitrate: 128_000
-        };
-        const sup = await AudioEncoder.isConfigSupported(audioCfg);
-        audioEncoder = new AudioEncoder({
-            output: (chunk, meta) => { muxer.addAudioChunk(chunk, meta); },
-            error: e => console.error('[HW] audio enc err:', e)
-        });
-        audioEncoder.configure(sup?.config || audioCfg);
-
-        const proc = new MediaStreamTrackProcessor({ track: audioTrack });
-        audioReader = proc.readable.getReader();
-        (async () => {
-            while (true) {
-                const { done, value } = await audioReader.read();
-                if (done || !hwRecorder) break;
-                if (audioEncoder.state === 'configured') {
-                    audioEncoder.encode(value);
-                    value.close();
-                } else { value.close(); break; }
-            }
-        })();
-    }
-
-    // Canvas frame capture loop
-    const frameMs = 1000 / TARGET_FPS;
-    let lastFrameTs = 0;
-    const rafLoop = (ts) => {
-        if (!hwRecorder) return;
-        if (ts - lastFrameTs >= frameMs) {
-            lastFrameTs = ts;
-            try {
-                const frame = new VideoFrame(canvas, {
-                    timestamp: frameCount * (1_000_000 / TARGET_FPS),
-                    duration:  1_000_000 / TARGET_FPS
-                });
-                if (encoder.state === 'configured') {
-                    encoder.encode(frame, { keyFrame: frameCount % keyInterval === 0 });
-                    frameCount++;
-                }
-                frame.close();
-            } catch(e) { console.warn('[HW] frame err:', e); }
-        }
-        hwRecorder.rafId = requestAnimationFrame(rafLoop);
-    };
-
-    hwRecorder = { encoder, audioEncoder, audioReader, muxer, rafId: 0 };
-    hwRecorder.rafId = requestAnimationFrame(rafLoop);
-    encBadge.textContent = `HW H.264 ${cfg.codec}`;
-    encBadge.className   = 'hw';
-    log('HW felvétel: ' + cfg.codec);
-}
-
-async function stopHW() {
-    if (!hwRecorder) return null;
-    const { encoder, audioEncoder, audioReader, muxer, rafId } = hwRecorder;
-    hwRecorder = null;
-    cancelAnimationFrame(rafId);
-    if (audioReader) { try { await audioReader.cancel(); } catch(_) {} }
-    if (encoder.state === 'configured') {
-        try { await encoder.flush(); encoder.close(); } catch(e) { console.warn('[HW] flush err:', e); }
-    }
-    if (audioEncoder?.state === 'configured') {
-        try { await audioEncoder.flush(); audioEncoder.close(); } catch(_) {}
-    }
-    muxer.finalize();
-    return new Blob([muxer.target.buffer], { type: 'video/mp4' });
-}
-
-// ── MR FALLBACK (MediaRecorder) ───────────────────────────────────────────────
-function pickMime() {
-    const list = [
-        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-        'video/mp4;codecs=avc1.42E01E',
-        'video/mp4',
-        'video/webm;codecs=vp8,opus',
-        'video/webm;codecs=vp9,opus',
-        'video/webm'
-    ];
-    if (!window.MediaRecorder?.isTypeSupported) return { mime: 'video/mp4', ext: 'mp4' };
-    for (const mime of list) {
-        try { if (MediaRecorder.isTypeSupported(mime)) return { mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' }; } catch(_) {}
-    }
-    return { mime: 'video/mp4', ext: 'mp4' };
-}
-
-function startMR(audioTrack, fps, bitrate) {
-    const vidStream = canvas.captureStream(fps);
-    if (audioTrack) vidStream.addTrack(audioTrack);
-    const { mime, ext } = pickMime();
-    lastExt = ext;
-    let mr;
-    try { mr = new MediaRecorder(vidStream, { mimeType: mime, videoBitsPerSecond: bitrate }); }
-    catch(_) { mr = new MediaRecorder(vidStream); }
-    mrChunks = [];
-    mr.ondataavailable = e => { if (e.data?.size > 0) { mrChunks.push(e.data); recBytes += e.data.size; } };
-    mr.onstop = () => {
-        const blob = new Blob(mrChunks, { type: mime });
-        mrChunks = [];
-        onDone(blob, ext);
-    };
-    mr.start(500);
-    mrRecorder = mr;
-    encBadge.textContent = 'MediaRec';
-    encBadge.className   = 'mr';
-    log('MediaRecorder fallback: ' + mime);
-}
-
-// ── FELVÉTEL START / STOP ─────────────────────────────────────────────────────
-async function startRec() {
-    if (isRecording || !cameraStream) return;
-    isRecording = true;
-    recBytes = 0;
-    doneOverlay.classList.remove('on');
-
-    const track    = cameraStream.getVideoTracks()[0];
-    const settings = track?.getSettings?.() || {};
-    const fps      = Math.round(settings.frameRate || 30);
-    const bitrate  = Math.max(12_000_000, OUT_W * OUT_H * fps * 0.08);
-
-    fitPreview();
-
-    const audioTrack = buildAudioTrack();
-    startAudio();
-
-    if (useHW) {
-        try {
-            await startHW(audioTrack);
-        } catch(e) {
-            log('HW sikertelen, fallback: ' + e.message);
-            useHW = false;
-            startMR(audioTrack, fps, bitrate);
-        }
-    } else {
-        startMR(audioTrack, fps, bitrate);
-    }
-
-    btnRecord.classList.add('recording');
-    setStatus('● REC');
-}
-
-async function stopRec() {
-    if (!isRecording) return;
-    isRecording = false;
-    btnRecord.classList.remove('recording');
-    setStatus('Mentés...');
-
-    if (hwRecorder) {
-        const blob = await stopHW();
-        stopAudio();
-        if (blob) onDone(blob, 'mp4');
-        else { setStatus(''); }
-    } else if (mrRecorder) {
-        try { mrRecorder.stop(); } catch(_) {}
-        mrRecorder = null;
-        stopAudio();
-        // onDone az mr.onstop-ból hívódik
-    }
-}
-
-// ── KÉSZ ─────────────────────────────────────────────────────────────────────
-function onDone(blob, ext) {
-    lastBlob = blob; lastExt = ext;
-    const mb = (blob.size / 1024 / 1024).toFixed(1);
-    doneInfo.textContent = `${ext.toUpperCase()} • ${mb} MB`;
-    doneOverlay.classList.add('on');
-    setStatus('');
-    log(`Kész: ${mb} MB`);
-}
-
-// ── VISSZASZÁMLÁLÁS ───────────────────────────────────────────────────────────
-function runCountdown(sec, cb) {
-    if (sec <= 0) { cb(); return; }
-    let n = sec;
-    countdown.textContent = n;
-    countdown.classList.add('on');
-    cdTimer = setInterval(() => {
-        n--;
-        if (n <= 0) {
-            clearInterval(cdTimer);
-            countdown.classList.remove('on');
-            cb();
-        } else {
-            countdown.textContent = n;
-        }
-    }, 1000);
-}
-
-// ── EVENTS ────────────────────────────────────────────────────────────────────
-btnRecord.disabled = true;
-btnRecord.addEventListener('click', () => {
-    if (isRecording) {
-        if (cdTimer) { clearInterval(cdTimer); cdTimer = null; countdown.classList.remove('on'); }
-        stopRec();
-    } else {
-        const sec = parseInt(inputCountdown.value, 10) || 0;
-        runCountdown(sec, startRec);
-    }
-});
-
 btnStart.addEventListener('click', async () => {
-    btnStart.disabled = true;
-    btnStart.textContent = 'Kamera indítás...';
-    // engedélykérés
+    btnStart.disabled = true; btnStart.textContent = 'Indítás...';
     try {
         const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         tmp.getTracks().forEach(t => t.stop());
-    } catch(e) {
-        log('Engedély hiba: ' + e.message);
-        btnStart.disabled = false; btnStart.textContent = 'INDÍTÁS'; return;
-    }
+    } catch(e) { log('Engedély hiba: ' + e.message); btnStart.disabled = false; btnStart.textContent = 'INDÍTÁS'; return; }
     await refreshCams();
     const ok = await startCamera();
     if (!ok) { btnStart.disabled = false; btnStart.textContent = 'INDÍTÁS'; return; }
     startOverlay.classList.add('gone');
-    // fullscreen (user gesture-ből)
     try {
         const el = document.documentElement;
         if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
@@ -727,51 +663,255 @@ btnStart.addEventListener('click', async () => {
     } catch(_) {}
 });
 
-// settings
-btnSettings.addEventListener('click', () => {
-    settingsDrawer.classList.add('on');
-    settingsBackdrop.classList.add('on');
+btnRecord.addEventListener('click', () => {
+    if (isRecording) {
+        if (cdTimer) { clearInterval(cdTimer); cdTimer = null; countdownEl.classList.remove('on'); }
+        stopRecording();
+    } else {
+        const sec = parseInt(inputCountdown.value, 10) || 0;
+        runCountdown(sec, startRecording);
+    }
 });
+
+btnSettings.addEventListener('click', () => { settingsDrawer.classList.add('on'); settingsBackdrop.classList.add('on'); });
 [btnCloseSettings, settingsBackdrop].forEach(el =>
-    el.addEventListener('click', () => {
-        settingsDrawer.classList.remove('on');
-        settingsBackdrop.classList.remove('on');
-    })
+    el.addEventListener('click', () => { settingsDrawer.classList.remove('on'); settingsBackdrop.classList.remove('on'); })
 );
+
 camSelect.addEventListener('change', () => { if (cameraStream) startCamera(); });
+
 overlayFile.addEventListener('change', () => {
     const f = overlayFile.files[0]; if (!f) return;
     const r = new FileReader();
-    r.onload = e => loadOverlay(e.target.result, f.name);
+    r.onload = e => setOverlaySource(e.target.result, f.name);
     r.readAsDataURL(f);
 });
-musicFile.addEventListener('change', async () => {
-    const f = musicFile.files[0]; if (!f) return;
-    try { await decodeAudio(await f.arrayBuffer(), f.name); }
+
+audioMixFile.addEventListener('change', async () => {
+    const f = audioMixFile.files[0]; if (!f) return;
+    try { await decodeAudioArrayBuffer(await f.arrayBuffer(), f.name); }
     catch(e) { log('Zene hiba: ' + e.message); }
 });
 
-// done overlay gombok
 btnDownload.addEventListener('click', () => {
-    if (!lastBlob) return;
-    const url = URL.createObjectURL(lastBlob);
-    const now = new Date();
-    const name = `KANDO_360_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.${lastExt}`;
-    const a = document.createElement('a');
-    a.href = url; a.download = name; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-});
-btnNewRec.addEventListener('click', () => {
-    lastBlob = null;
-    doneOverlay.classList.remove('on');
-    setStatus('');
+    if (!currentBlobUrl) return;
+    const now  = new Date();
+    const ts   = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') +
+                 '_' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
+    const a = Object.assign(document.createElement('a'), { href: currentBlobUrl, download: 'KANDO_360_' + ts + '.' + currentBlobExt });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(currentBlobUrl), 30000);
 });
 
-// ── INIT ─────────────────────────────────────────────────────────────────────
-window.addEventListener('resize', fitPreview);
-fitPreview();
-detectHW();
-loadOverlay(DEFAULT_OVERLAY + '?v=' + Date.now(), DEFAULT_OVERLAY);
+btnClear.addEventListener('click', clearOutput);
+
+// ── WEBCODES RECORDER ─────────────────────────────────────────────────────────
+class WebCodecsRecorder {
+    constructor(videoTrack, audioTrack, options = {}) {
+        this.videoTrack  = videoTrack;
+        this.audioTrack  = audioTrack;
+        this.options     = options;
+        this.encoder     = null;
+        this.audioEncoder= null;
+        this.muxer       = null;
+        this.reader      = null;
+        this.audioReader = null;
+        this.frameCounter= 0;
+        this.keyFrameIntervalFrames = 0;
+        this.isRecording = false;
+        this.sourceCanvas= options.sourceCanvas || null;
+        this.chosenConfig= null;
+        this.videoBaseTs = null;
+        this.audioBaseTs = null;
+        this.framerate   = options.framerate || 30;
+        this.rafId       = 0;
+    }
+
+    async start() {
+        const settings  = this.videoTrack?.getSettings?.() || {};
+        const width     = this.options.width    || settings.width    || OUTPUT_WIDTH;
+        const height    = this.options.height   || settings.height   || OUTPUT_HEIGHT;
+        const framerate = this.options.framerate || settings.frameRate|| 30;
+        const bitrate   = this.options.videoBitsPerSecond || 12_000_000;
+        this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
+        this.frameCounter = 0;
+        this.isRecording  = true;
+        this.framerate    = framerate;
+
+        const audioInfo = this._getAudioInfo();
+        this.muxer = new Mp4Muxer.Muxer({
+            target: new Mp4Muxer.ArrayBufferTarget(),
+            video: { codec: 'avc', width, height },
+            ...(audioInfo ? { audio: audioInfo } : {}),
+            fastStart: 'in-memory'
+        });
+
+        this.chosenConfig = await this._pickVideoConfig(width, height, framerate, bitrate);
+        this.encoder = new VideoEncoder({
+            output: (chunk, meta) => {
+                try {
+                    let m = meta;
+                    if (m?.decoderConfig?.colorSpace == null && m?.decoderConfig) {
+                        m = { ...m, decoderConfig: { ...m.decoderConfig } };
+                        delete m.decoderConfig.colorSpace;
+                    }
+                    this.muxer.addVideoChunk(chunk, m);
+                    recBytes += chunk.byteLength || 0;
+                } catch(e) { console.warn('[WC] mux video err:', e); }
+            },
+            error: e => console.error('[WC] video enc err:', e)
+        });
+        this.encoder.configure(this.chosenConfig);
+        await this._startAudioEncoding(audioInfo);
+        this._startCapture(width, height, framerate);
+    }
+
+    _getAudioInfo() {
+        if (!this.audioTrack || !('AudioEncoder' in window) || typeof MediaStreamTrackProcessor === 'undefined') return null;
+        const s = this.audioTrack.getSettings();
+        return { codec: 'aac', numberOfChannels: s.channelCount || 2, sampleRate: s.sampleRate || 48000 };
+    }
+
+    async _pickVideoConfig(width, height, framerate, bitrate) {
+        const mode = this.options.codecSelect?.value || 'auto';
+        const h264High = ['avc1.64002A','avc1.640029','avc1.64001F'];
+        const h264Main = ['avc1.4D402A','avc1.4D4029'];
+        const h264Base = ['avc1.42E02A','avc1.42E01F','avc1.42E01E','avc1.42001E'];
+        let codecs;
+        if      (mode === 'h264-high') codecs = [...h264High,...h264Main,...h264Base];
+        else if (mode === 'h264-main') codecs = [...h264Main,...h264High,...h264Base];
+        else if (mode === 'h264-base') codecs = [...h264Base,...h264Main,...h264High];
+        else                           codecs = [...h264High,...h264Main,...h264Base];
+        const base = { width, height, bitrate, framerate, bitrateMode: 'variable', latencyMode: 'quality' };
+        for (const accel of ['prefer-hardware','no-preference']) {
+            for (const codec of codecs) {
+                const cfg = { ...base, codec, hardwareAcceleration: accel };
+                try { const r = await VideoEncoder.isConfigSupported(cfg); if (r?.supported) return r.config || cfg; } catch(_) {}
+            }
+        }
+        throw new Error('Nincs támogatott H.264 konfig');
+    }
+
+    async _startAudioEncoding(audioInfo) {
+        if (!audioInfo || typeof MediaStreamTrackProcessor === 'undefined') return;
+        const cfg = { codec: 'mp4a.40.2', sampleRate: audioInfo.sampleRate, numberOfChannels: audioInfo.numberOfChannels, bitrate: 128_000 };
+        const sup = await AudioEncoder.isConfigSupported(cfg);
+        this.audioEncoder = new AudioEncoder({
+            output: (chunk, meta) => { this.muxer.addAudioChunk(chunk, meta); recBytes += chunk.byteLength || 0; },
+            error: e => console.error('[WC] audio enc err:', e)
+        });
+        this.audioEncoder.configure(sup?.config || cfg);
+        const proc = new MediaStreamTrackProcessor({ track: this.audioTrack });
+        this.audioReader = proc.readable.getReader();
+        this._processAudio();
+    }
+
+    _startCapture(width, height, framerate) {
+        if (this.sourceCanvas) {
+            const frameMs = 1000 / framerate;
+            let lastTs = 0;
+            const loop = (ts) => {
+                if (!this.isRecording) return;
+                if (ts - lastTs >= frameMs) {
+                    lastTs = ts;
+                    try {
+                        const frame = new VideoFrame(this.sourceCanvas, {
+                            timestamp: this.frameCounter * (1_000_000 / framerate),
+                            duration:  1_000_000 / framerate
+                        });
+                        if (this.encoder.state === 'configured') {
+                            this.encoder.encode(frame, { keyFrame: this.frameCounter % this.keyFrameIntervalFrames === 0 });
+                            this.frameCounter++;
+                        }
+                        frame.close();
+                    } catch(e) { console.warn('[WC] frame err:', e); }
+                }
+                this.rafId = requestAnimationFrame(loop);
+            };
+            this.rafId = requestAnimationFrame(loop);
+        } else if (this.videoTrack && typeof MediaStreamTrackProcessor !== 'undefined') {
+            const proc = new MediaStreamTrackProcessor({ track: this.videoTrack });
+            this.reader = proc.readable.getReader();
+            this._processFrames();
+        }
+    }
+
+    async _processFrames() {
+        try {
+            while (this.isRecording) {
+                const { done, value: frame } = await this.reader.read();
+                if (done) break;
+                if (frame && this.encoder.state === 'configured') {
+                    if (this.videoBaseTs === null) this.videoBaseTs = frame.timestamp || 0;
+                    const adjTs = Math.max(0, (frame.timestamp || 0) - this.videoBaseTs);
+                    const adjFrame = new VideoFrame(frame, { timestamp: adjTs, duration: frame.duration });
+                    this.encoder.encode(adjFrame, { keyFrame: this.frameCounter % this.keyFrameIntervalFrames === 0 });
+                    this.frameCounter++;
+                    adjFrame.close();
+                }
+                frame?.close();
+            }
+        } catch(e) { console.error('[WC] frames err:', e); }
+    }
+
+    async _processAudio() {
+        if (!this.audioReader || !this.audioEncoder) return;
+        try {
+            while (this.isRecording) {
+                const { done, value: audioData } = await this.audioReader.read();
+                if (done) break;
+                if (audioData && this.audioEncoder.state === 'configured') {
+                    if (this.audioBaseTs === null) this.audioBaseTs = audioData.timestamp || 0;
+                    const adjTs = Math.max(0, (audioData.timestamp || 0) - this.audioBaseTs);
+                    const { format, data } = buildInterleavedAudioData(audioData);
+                    const adj = new AudioData({
+                        format, sampleRate: audioData.sampleRate,
+                        numberOfFrames: audioData.numberOfFrames,
+                        numberOfChannels: audioData.numberOfChannels,
+                        timestamp: adjTs, data
+                    });
+                    this.audioEncoder.encode(adj);
+                    adj.close();
+                }
+                audioData?.close();
+            }
+        } catch(e) { console.error('[WC] audio err:', e); }
+    }
+
+    async stop() {
+        this.isRecording = false;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = 0; }
+        if (this.reader)      { try { await this.reader.cancel(); }      catch(_) {} this.reader = null; }
+        if (this.audioReader) { try { await this.audioReader.cancel(); } catch(_) {} this.audioReader = null; }
+        if (this.encoder?.state === 'configured') {
+            try { await this.encoder.flush(); this.encoder.close(); } catch(e) { console.warn('[WC] video flush:', e); }
+        }
+        if (this.audioEncoder?.state === 'configured') {
+            try { await this.audioEncoder.flush(); this.audioEncoder.close(); } catch(e) { console.warn('[WC] audio flush:', e); }
+        }
+        this.muxer.finalize();
+        return new Blob([this.muxer.target.buffer], { type: 'video/mp4' });
+    }
+}
+
+function buildInterleavedAudioData(audioData) {
+    const { format, numberOfChannels: ch, numberOfFrames: frames } = audioData;
+    const base = format.includes('planar') ? format.replace('-planar','') : format;
+    const TA   = base === 'f32' ? Float32Array : (base === 's16' ? Int16Array : Uint8Array);
+    const out  = new TA(frames * ch);
+    if (format.includes('planar')) {
+        for (let c = 0; c < ch; c++) {
+            const plane = new TA(frames);
+            audioData.copyTo(plane, { planeIndex: c });
+            for (let i = 0; i < frames; i++) out[i * ch + c] = plane[i];
+        }
+    } else { audioData.copyTo(out, { planeIndex: 0 }); }
+    return { format: base, data: out };
+}
+
+fitCanvas();
+detectWebCodecsSupport();
+setOverlaySource(DEFAULT_OVERLAY_URL + '?v=' + Date.now(), DEFAULT_OVERLAY_URL);
 loadDefaultAudio();
 </script>
 </body>
