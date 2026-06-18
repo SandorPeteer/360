@@ -987,7 +987,14 @@
 
                 await this.startAudioEncoding(audioInfo);
 
-                if (this.sourceCanvas) {
+                if (this.sourceCanvas && typeof MediaStreamTrackProcessor !== 'undefined') {
+                    // Canvas stream → MediaStreamTrackProcessor: GPU-n marad, nem kell CPU readback
+                    const canvasTrack = this.sourceCanvas.captureStream(framerate).getVideoTracks()[0];
+                    this.canvasCaptureTrack = canvasTrack;
+                    const processor = new MediaStreamTrackProcessor({ track: canvasTrack });
+                    this.reader = processor.readable.getReader();
+                    this.processFrames();
+                } else if (this.sourceCanvas) {
                     this.captureFramesWithCanvas(width, height, framerate);
                 } else if (this.videoTrack && typeof MediaStreamTrackProcessor !== 'undefined') {
                     const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
@@ -1159,6 +1166,10 @@
 
             async stop() {
                 this.isRecording = false;
+                if (this.canvasCaptureTrack) {
+                    try { this.canvasCaptureTrack.stop(); } catch (_) {}
+                    this.canvasCaptureTrack = null;
+                }
                 if (this.reader) {
                     try { await this.reader.cancel(); } catch (_) {}
                     this.reader = null;
