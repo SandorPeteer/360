@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.2</title>
+    <title>360 HW Record Minimal v1.3</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -35,12 +35,18 @@
         #menuDrawer.open { transform: translateX(0); }
         #recBtnWrap { position: fixed; right: 16px; bottom: 16px; z-index: 20; }
         #btnRecord { width: 140px; height: 44px; border-radius: 999px; }
-        #videoWrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 8px; overflow: hidden; }
+        #videoWrap { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: flex-start; padding: 0 72px 0 0; overflow: hidden; }
+        #startOverlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: #0b0f14; }
+        #startOverlay.hidden { display: none; }
+        #btnStartBooth { width: min(420px, 86vw); min-height: 86px; border-radius: 18px; font-size: 24px; letter-spacing: .08em; background: #16a34a; color: #fff; border: 0; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
     </style>
 </head>
 
 <body>
     <div id="app">
+        <div id="startOverlay">
+            <button id="btnStartBooth">START 360 BOOTH</button>
+        </div>
         <button id="menuBtn" title="Menu">☰</button>
         <div id="recBtnWrap">
             <button id="btnRecord" disabled>REC</button>
@@ -60,7 +66,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.2 fullscreen audio loop</span><br>
+                    Build: <span>v1.3 booth start no mic</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -145,6 +151,8 @@
         const resolution = document.getElementById('resolution');
         const codecSelect = document.getElementById('codecSelect');
         const btnStartCam = document.getElementById('btnStartCam');
+        const btnStartBooth = document.getElementById('btnStartBooth');
+        const startOverlay = document.getElementById('startOverlay');
         const btnRecord = document.getElementById('btnRecord');
         const encoderStatus = document.getElementById('encoderStatus');
         const actualRes = document.getElementById('actualRes');
@@ -236,8 +244,11 @@
 
         function applyPreviewFit() {
             const wrap = document.getElementById('videoWrap');
-            const vw = (wrap && wrap.clientWidth) || window.innerWidth || canvas.width;
-            const vh = (wrap && wrap.clientHeight) || window.innerHeight || canvas.height;
+            const styles = wrap ? window.getComputedStyle(wrap) : null;
+            const padX = styles ? parseFloat(styles.paddingLeft || '0') + parseFloat(styles.paddingRight || '0') : 0;
+            const padY = styles ? parseFloat(styles.paddingTop || '0') + parseFloat(styles.paddingBottom || '0') : 0;
+            const vw = Math.max(1, ((wrap && wrap.clientWidth) || window.innerWidth || canvas.width) - padX);
+            const vh = Math.max(1, ((wrap && wrap.clientHeight) || window.innerHeight || canvas.height) - padY);
             const ar = canvas.width / canvas.height;
             const viewAr = vw / vh;
             if (viewAr > ar) {
@@ -464,9 +475,7 @@
         async function startCamera() {
             stopCamera();
             const camId = camSelect.value;
-            const micId = micSelect.value;
             activeCameraDeviceId = camId || activeCameraDeviceId;
-            activeMicDeviceId = micId || activeMicDeviceId;
             const videoConstraints = {
                 width: { ideal: 1280 },
                 height: { ideal: 720 },
@@ -476,12 +485,7 @@
             };
             const constraints = {
                 video: videoConstraints,
-                audio: micId ? {
-                    deviceId: { exact: micId },
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                } : false
+                audio: false
             };
             try {
                 cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -568,24 +572,14 @@
                 return;
             }
             setAudioStatus(audioFileBuffer ? `Music ready: ${audioFileName || 'loaded'}` : 'No music loaded');
-            let mixedTrack = null;
-            const micTrack = cameraStream.getAudioTracks()[0] || null;
-            const canEncodeTrackAudio = 'AudioEncoder' in window && typeof MediaStreamTrackProcessor !== 'undefined';
             if (audioFileBuffer && !('AudioEncoder' in window)) {
                 logMsg('AudioEncoder missing, music cannot be saved into MP4.');
                 setAudioStatus('No AudioEncoder: MP4 will be silent');
             }
-            if (audioFileBuffer && !micTrack) {
+            if (audioFileBuffer) {
                 buildMixedAudioTrack(null, audioFileBuffer);
-            } else if (canEncodeTrackAudio && micTrack) {
-                mixedTrack = buildMixedAudioTrack(micTrack, null);
-                if (!mixedTrack) {
-                    logMsg('Audio unavailable, recording video only.');
-                }
-            } else if (micTrack && !audioFileBuffer) {
-                logMsg('Audio encoding API missing, recording video only.');
             }
-            recorder = new WebCodecsRecorder(videoTrack, mixedTrack, {
+            recorder = new WebCodecsRecorder(videoTrack, null, {
                 width: canvas.width,
                 height: canvas.height,
                 framerate: fps,
@@ -648,6 +642,13 @@
             await requestFullscreenMode();
             await startCamera();
         });
+        if (btnStartBooth) {
+            btnStartBooth.addEventListener('click', async () => {
+                await requestFullscreenMode();
+                await startCamera();
+                if (startOverlay) startOverlay.classList.add('hidden');
+            });
+        }
         btnRecord.addEventListener('click', async () => {
             await requestFullscreenMode();
             if (isRecording) await stopRecording();
@@ -1144,14 +1145,15 @@
                 for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
                     const frames = Math.min(chunkFrames, totalFrames - offset);
                     const data = new Float32Array(frames * channels);
-                    for (let i = 0; i < frames; i++) {
-                        for (let ch = 0; ch < channels; ch++) {
+                    for (let ch = 0; ch < channels; ch++) {
+                        const planeOffset = ch * frames;
+                        for (let i = 0; i < frames; i++) {
                             const sourceFrame = (offset + i) % audioBuffer.length;
-                            data[i * channels + ch] = channelData[ch][sourceFrame] || 0;
+                            data[planeOffset + i] = channelData[ch][sourceFrame] || 0;
                         }
                     }
                     const audioData = new AudioData({
-                        format: 'f32',
+                        format: 'f32-planar',
                         sampleRate,
                         numberOfFrames: frames,
                         numberOfChannels: channels,
@@ -1263,9 +1265,6 @@
                 loadDefaultAudio(),
                 refreshDevices()
             ]);
-            setTimeout(() => {
-                if (!cameraStream) startCamera();
-            }, 250);
         }
         initBooth();
 
