@@ -1933,10 +1933,13 @@
         }
 
         function getViewportIsPortrait() {
+            // matchMedia az iOS Safarin a legmegbízhatóbb (azonnal frissül forgatáskor)
+            if (window.matchMedia) return window.matchMedia('(orientation: portrait)').matches;
+            if (window.screen && window.screen.orientation && window.screen.orientation.type)
+                return window.screen.orientation.type.startsWith('portrait');
             const vw = window.innerWidth || 0;
             const vh = window.innerHeight || 0;
             if (vw && vh) return vh >= vw;
-            if (window.matchMedia) return window.matchMedia('(orientation: portrait)').matches;
             return true;
         }
 
@@ -1992,6 +1995,7 @@
             // Fallback: window.orientationchange (iOS legacy)
             window.addEventListener('orientationchange', () => {
                 setTimeout(updateOrientationFromViewport, 100);
+                setTimeout(updateOrientationFromViewport, 350); // iPad lassan frissíti a viewport-ot
             });
 
             // Fallback: window resize
@@ -2000,6 +2004,15 @@
                     setTimeout(updateOrientationFromViewport, 100);
                 }
             });
+
+            // visualViewport (iOS Safari: legmegbízhatóbb orientációjelzés forgatáskor)
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', () => {
+                    if (isAutoOrientationEnabled) {
+                        setTimeout(updateOrientationFromViewport, 50);
+                    }
+                });
+            }
         }
 
         // Forgatás: user beállítás VAGY automatikus orientáció swap
@@ -3064,6 +3077,8 @@
                 statusBadge.innerText = 'SAFARI: NINCS FELVÉTEL';
                 statusBadge.style.color = 'red';
                 processText.innerText = 'Ez a Safari verzió nem támogatja a MediaRecorder-t. Használj Chrome-ot, vagy engedélyezd a Safari kísérleti MediaRecorder/WebRTC opcióit.';
+            } else if (typeof canvas.captureStream !== 'function') {
+                processText.innerText = 'Figyelem: canvas stream rögzítés nem elérhető (iOS 16.4+ szükséges). A feldolgozás után a mentés nem fog működni.';
             }
         })();
 
@@ -4249,6 +4264,16 @@
                 src = actx.createBufferSource(); src.buffer = d; src.loop = true; src.connect(dest);
             }
 
+            if (typeof canvas.captureStream !== 'function') {
+                statusBadge.innerText = 'SAFARI: CANVAS STREAM HIBA';
+                statusBadge.style.color = 'red';
+                processText.innerText = 'A canvas stream rögzítése nem elérhető ezen a Safari verzión (iOS 16.4+ szükséges). Frissítsd az iPadet, vagy használj Chrome-ot.';
+                progressBarContainer.style.display = 'none';
+                if (actx) actx.close();
+                isProcessing = false;
+                resetUI();
+                return;
+            }
             const cStream = canvas.captureStream(renderFps);
             if (hasA) cStream.addTrack(dest.stream.getAudioTracks()[0]);
 
@@ -4600,6 +4625,13 @@
                 video.autoplay = true;
                 video.muted = true;
                 video.playsInline = true;
+                video.setAttribute('playsinline', '');
+                video.setAttribute('webkit-playsinline', '');
+                // iOS Safari: off-screen (DOM-on kívüli) videóelem nem dekódol keretet —
+                // ezért ideiglenesen DOM-ba kell tenni, láthatatlanul
+                video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+                document.body.appendChild(video);
+                this._captureVideo = video;
 
                 const canvas = document.createElement('canvas');
                 canvas.width = width;
@@ -4644,12 +4676,23 @@
                 };
 
                 video.addEventListener('loadedmetadata', () => {
+                    video.play().catch(() => {}); // iOS Safari: explicit play kell
                     requestAnimationFrame(captureFrame);
                 });
             }
 
             async stop() {
                 this.isRecording = false;
+
+                // iOS Safari: DOM-ba tett capture videó takarítása
+                if (this._captureVideo) {
+                    try { this._captureVideo.pause(); } catch (_) {}
+                    try { this._captureVideo.srcObject = null; } catch (_) {}
+                    if (this._captureVideo.parentNode) {
+                        this._captureVideo.parentNode.removeChild(this._captureVideo);
+                    }
+                    this._captureVideo = null;
+                }
 
                 if (this.reader) {
                     try {
