@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.14</title>
+    <title>360 HW Record Minimal v1.15</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.14</span><br>
+                    Build: <span>v1.15</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1095,16 +1095,17 @@
             }
 
             async processFrames() {
+                const frameDurUs = Math.round(1_000_000 / this.framerate);
                 try {
                     while (this.isRecording) {
                         const { done, value: frame } = await this.reader.read();
                         if (done) break;
                         if (frame && this.encoder.state === 'configured') {
-                            if (this.videoBaseTs === null) this.videoBaseTs = frame.timestamp || 0;
-                            const adjTs = Math.max(0, (frame.timestamp || 0) - this.videoBaseTs);
+                            // Use monotonic counter-based timestamps — captureStream frame.duration can be null
+                            const tsUs = this.frameCounter * frameDurUs;
                             const adjFrame = new VideoFrame(frame, {
-                                timestamp: adjTs,
-                                duration: frame.duration
+                                timestamp: tsUs,
+                                duration: frameDurUs
                             });
                             const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
                             this.encoder.encode(adjFrame, { keyFrame });
