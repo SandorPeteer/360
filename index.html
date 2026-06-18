@@ -45,7 +45,8 @@
         #countdownNumber { font-size: clamp(120px, 28vw, 260px); font-weight: 900; color: #fff; text-shadow: 0 0 60px rgba(0,0,0,.8); line-height: 1; user-select: none; }
         #processingOverlay { position: fixed; inset: 0; z-index: 28; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: rgba(0,0,0,.72); pointer-events: none; }
         #processingOverlay.hidden { display: none; }
-        #processingText { color: #fff; font-size: 22px; font-weight: 700; letter-spacing: .06em; }
+        #processingText { color: #fff; font-size: 28px; font-weight: 900; letter-spacing: .06em; text-align: center; }
+        #processingSubtext { color: #94a3b8; font-size: 15px; margin-top: 6px; }
     </style>
 </head>
 
@@ -65,7 +66,10 @@
         </div>
 
         <div id="countdownOverlay" class="hidden"><div id="countdownNumber"></div></div>
-        <div id="processingOverlay" class="hidden"><div id="processingText">Feldolgozás...</div></div>
+        <div id="processingOverlay" class="hidden">
+            <div id="processingText">⏳ Feldolgozás...</div>
+            <div id="processingSubtext">Hang bemuxolása, kis türelmet...</div>
+        </div>
         <div id="menuBackdrop"></div>
         <div id="menuDrawer">
             <div id="menuHeader">
@@ -666,18 +670,14 @@
                 return;
             }
 
-            // WebCodecs path: video-only HW encoding, audio plays separately and is muxed in if AudioEncoder available
-            const hasAudioEnc = ('AudioEncoder' in window);
-            const hasMSTP = (typeof MediaStreamTrackProcessor !== 'undefined');
-            const musicTrack = (audioFileBuffer && hasAudioEnc && hasMSTP)
-                ? buildMixedAudioTrack(null, audioFileBuffer)
-                : null;
+            // WebCodecs path: HW video encoding, audio muxed in post-processing after stop()
+            // buildMixedAudioTrack itt csak a monitor lejátszáshoz kell (hangszóró), az audio track-et nem használjuk
+            if (audioFileBuffer) {
+                buildMixedAudioTrack(null, audioFileBuffer);
+            }
+            setAudioStatus(audioFileBuffer ? 'Felvétel közben zene szól, utána bemuxolás...' : 'Nincs zenefájl');
 
-            setAudioStatus(audioFileBuffer
-                ? (musicTrack ? `Music → WebCodecs encoder` : `Music plays live (video-only encode)`)
-                : 'No music loaded');
-
-            recorder = new WebCodecsRecorder(track, musicTrack, {
+            recorder = new WebCodecsRecorder(track, audioFileBuffer, {
                 width: canvas.width,
                 height: canvas.height,
                 framerate: fps,
@@ -967,26 +967,24 @@
         }
 
         class WebCodecsRecorder {
-            constructor(videoTrack, audioTrack, options = {}) {
+            constructor(videoTrack, audioFileBuffer, options = {}) {
                 this.videoTrack = videoTrack;
-                this.audioTrack = audioTrack;
+                this.audioFileBuffer = audioFileBuffer; // decoded AudioBuffer for post-mux
                 this.options = options;
                 this.encoder = null;
-                this.audioEncoder = null;
                 this.muxer = null;
                 this.reader = null;
-                this.audioReader = null;
                 this.frameCounter = 0;
                 this.keyFrameIntervalFrames = 0;
                 this.isRecording = false;
                 this.sourceCanvas = options.sourceCanvas || null;
                 this.chosenConfig = null;
                 this.videoBaseTs = null;
-                this.audioBaseTs = null;
                 this.startedAtMs = 0;
                 this.framerate = options.framerate || 30;
-                this.audioChunkCount = 0;
-                this.fileAudioChunkCount = 0;
+                // Collect encoded video chunks during recording; audio is muxed after stop()
+                this.videoChunks = []; // [{chunk, meta}]
+                this.recordedDurationUs = 0;
             }
 
             async start() {
@@ -997,43 +995,34 @@
                 const bitrate = this.options.videoBitsPerSecond || 12000000;
                 this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
                 this.frameCounter = 0;
+                this.videoChunks = [];
+                this.recordedDurationUs = 0;
                 this.isRecording = true;
                 this.startedAtMs = performance.now();
                 this.framerate = framerate;
-
-                const audioInfo = this.getAudioInfo();
-                this.muxer = new Mp4Muxer.Muxer({
-                    target: new Mp4Muxer.ArrayBufferTarget(),
-                    video: { codec: 'avc', width, height },
-                    ...(audioInfo ? { audio: audioInfo } : {}),
-                    fastStart: 'in-memory'
-                });
+                this.width = width;
+                this.height = height;
 
                 this.chosenConfig = await this.pickVideoConfig(width, height, framerate, bitrate);
                 this.encoder = new VideoEncoder({
                     output: (chunk, metadata) => {
                         try {
-                            let muxMeta;
+                            let meta = null;
                             if (metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
-                                muxMeta = { ...metadata, decoderConfig: { ...metadata.decoderConfig } };
-                                if (muxMeta.decoderConfig.colorSpace == null) {
-                                    delete muxMeta.decoderConfig.colorSpace;
-                                }
+                                meta = { ...metadata, decoderConfig: { ...metadata.decoderConfig } };
+                                if (meta.decoderConfig.colorSpace == null) delete meta.decoderConfig.colorSpace;
                             }
-                            this.muxer.addVideoChunk(chunk, muxMeta);
+                            this.videoChunks.push({ chunk, meta });
                             recBytes += chunk.byteLength || 0;
                         } catch (e) {
-                            console.warn('[WebCodecs] muxer addVideoChunk failed:', e);
+                            console.warn('[WebCodecs] video chunk collect failed:', e);
                         }
                     },
                     error: (e) => console.error('[WebCodecs] Video encode error:', e)
                 });
                 this.encoder.configure(this.chosenConfig);
 
-                await this.startAudioEncoding(audioInfo);
-
                 if (this.sourceCanvas && typeof MediaStreamTrackProcessor !== 'undefined') {
-                    // Canvas stream → MediaStreamTrackProcessor: GPU-n marad, nem kell CPU readback
                     const canvasTrack = this.sourceCanvas.captureStream(framerate).getVideoTracks()[0];
                     this.canvasCaptureTrack = canvasTrack;
                     const processor = new MediaStreamTrackProcessor({ track: canvasTrack });
@@ -1046,43 +1035,6 @@
                     this.reader = processor.readable.getReader();
                     this.processFrames();
                 }
-            }
-
-            getAudioInfo() {
-                if (!this.audioTrack || !('AudioEncoder' in window)) return null;
-                const settings = this.audioTrack.getSettings ? this.audioTrack.getSettings() : {};
-                return {
-                    codec: 'aac',
-                    numberOfChannels: settings.channelCount || 2,
-                    sampleRate: settings.sampleRate || 48000
-                };
-            }
-
-            async startAudioEncoding(audioInfo) {
-                if (!audioInfo) return;
-                if (typeof MediaStreamTrackProcessor === 'undefined') return;
-                const bitrate = this.options.audioBitsPerSecond || 128000;
-                const config = {
-                    codec: 'mp4a.40.2',
-                    sampleRate: audioInfo.sampleRate,
-                    numberOfChannels: audioInfo.numberOfChannels,
-                    bitrate
-                };
-                const supported = await AudioEncoder.isConfigSupported(config);
-                const finalConfig = supported && supported.supported ? (supported.config || config) : config;
-                this.audioEncoder = new AudioEncoder({
-                    output: (chunk, metadata) => {
-                        this.muxer.addAudioChunk(chunk, metadata);
-                        this.audioChunkCount++;
-                        recBytes += chunk.byteLength || 0;
-                    },
-                    error: (e) => console.error('[WebCodecs] Audio encode error:', e)
-                });
-                this.audioEncoder.configure(finalConfig);
-                const processor = new MediaStreamTrackProcessor({ track: this.audioTrack });
-                this.audioReader = processor.readable.getReader();
-                setAudioStatus('Music track encoder running');
-                this.processAudio();
             }
 
             async pickVideoConfig(width, height, framerate, bitrate) {
@@ -1146,37 +1098,6 @@
                 }
             }
 
-            async processAudio() {
-                if (!this.audioReader || !this.audioEncoder) return;
-                try {
-                    while (this.isRecording) {
-                        const { done, value: audioData } = await this.audioReader.read();
-                        if (done) break;
-                        if (audioData && this.audioEncoder.state === 'configured') {
-                            if (this.audioBaseTs === null) this.audioBaseTs = audioData.timestamp || 0;
-                            const adjTs = Math.max(0, (audioData.timestamp || 0) - this.audioBaseTs);
-                            const { format, data } = buildInterleavedAudioData(audioData);
-                            const numberOfChannels = audioData.numberOfChannels;
-                            const numberOfFrames = audioData.numberOfFrames;
-                            const sampleRate = audioData.sampleRate;
-                            const adjAudio = new AudioData({
-                                format,
-                                sampleRate,
-                                numberOfFrames,
-                                numberOfChannels,
-                                timestamp: adjTs,
-                                data
-                            });
-                            this.audioEncoder.encode(adjAudio);
-                            adjAudio.close();
-                        }
-                        audioData && audioData.close();
-                    }
-                } catch (e) {
-                    console.error('[WebCodecs] Audio processing error:', e);
-                }
-            }
-
             captureFramesWithCanvas(width, height, framerate) {
                 const canvasRef = this.sourceCanvas;
                 if (!canvasRef) {
@@ -1219,10 +1140,6 @@
                     try { await this.reader.cancel(); } catch (_) {}
                     this.reader = null;
                 }
-                if (this.audioReader) {
-                    try { await this.audioReader.cancel(); } catch (_) {}
-                    this.audioReader = null;
-                }
                 if (this.encoder && this.encoder.state === 'configured') {
                     try {
                         await this.encoder.flush();
@@ -1231,22 +1148,123 @@
                         console.warn('[WebCodecs] Video flush/close error:', e);
                     }
                 }
-                if (this.audioEncoder && this.audioEncoder.state === 'configured') {
-                    try {
-                        await this.audioEncoder.flush();
-                        this.audioEncoder.close();
-                        setAudioStatus(this.audioChunkCount > 0 ? `Music track muxed: ${this.audioChunkCount} AAC chunks` : 'Music track produced 0 chunks');
-                    } catch (e) {
-                        console.warn('[WebCodecs] Audio flush/close error:', e);
-                        setAudioStatus(`Music track mux failed: ${e && e.message ? e.message : 'error'}`);
+
+                // Measure actual recorded duration from video chunks timestamps
+                if (this.videoChunks.length > 0) {
+                    const last = this.videoChunks[this.videoChunks.length - 1];
+                    this.recordedDurationUs = (last.chunk.timestamp || 0) + (last.chunk.duration || Math.round(1_000_000 / this.framerate));
+                }
+
+                return await this._muxFinal();
+            }
+
+            async _muxFinal() {
+                const width = this.width || this.options.width || 720;
+                const height = this.height || this.options.height || 1280;
+                const hasAudioEnc = 'AudioEncoder' in window;
+                const audioBuffer = this.audioFileBuffer;
+                const canEncodeAudio = hasAudioEnc && audioBuffer && this.recordedDurationUs > 0;
+
+                const audioInfo = canEncodeAudio ? {
+                    codec: 'aac',
+                    numberOfChannels: audioBuffer.numberOfChannels,
+                    sampleRate: audioBuffer.sampleRate
+                } : null;
+
+                const muxer = new Mp4Muxer.Muxer({
+                    target: new Mp4Muxer.ArrayBufferTarget(),
+                    video: { codec: 'avc', width, height },
+                    ...(audioInfo ? { audio: audioInfo } : {}),
+                    fastStart: 'in-memory'
+                });
+
+                // Write all collected video chunks
+                for (const { chunk, meta } of this.videoChunks) {
+                    try { muxer.addVideoChunk(chunk, meta); } catch (e) {
+                        console.warn('[mux] addVideoChunk failed:', e);
                     }
                 }
-                if (this.muxer) {
-                    this.muxer.finalize();
-                    const { buffer } = this.muxer.target;
-                    return new Blob([buffer], { type: 'video/mp4' });
+                this.videoChunks = [];
+
+                if (canEncodeAudio) {
+                    setAudioStatus('Hang kódolása...');
+                    await this._encodeAudioIntoMuxer(muxer, audioBuffer, audioInfo);
+                } else {
+                    setAudioStatus(hasAudioEnc ? 'Hang: nincs audio buffer' : 'Hang: AudioEncoder nem elérhető (Safari)');
                 }
-                return new Blob([], { type: 'video/mp4' });
+
+                muxer.finalize();
+                const { buffer } = muxer.target;
+                return new Blob([buffer], { type: 'video/mp4' });
+            }
+
+            async _encodeAudioIntoMuxer(muxer, audioBuffer, audioInfo) {
+                const sampleRate = audioBuffer.sampleRate;
+                const numberOfChannels = audioBuffer.numberOfChannels;
+                const durationSec = this.recordedDurationUs / 1_000_000;
+                // Only use as many audio samples as the video duration
+                const totalFrames = Math.min(audioBuffer.length, Math.ceil(durationSec * sampleRate));
+                const CHUNK_FRAMES = 4096;
+                const audioBitrate = this.options.audioBitsPerSecond || 128000;
+
+                const config = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, bitrate: audioBitrate };
+                let finalConfig = config;
+                try {
+                    const sup = await AudioEncoder.isConfigSupported(config);
+                    if (sup && sup.supported) finalConfig = sup.config || config;
+                } catch (_) {}
+
+                let audioChunkCount = 0;
+                await new Promise((resolve, reject) => {
+                    const enc = new AudioEncoder({
+                        output: (chunk, meta) => {
+                            try { muxer.addAudioChunk(chunk, meta); audioChunkCount++; } catch (e) {
+                                console.warn('[mux] addAudioChunk failed:', e);
+                            }
+                        },
+                        error: (e) => { console.error('[AudioEnc]', e); reject(e); }
+                    });
+                    enc.configure(finalConfig);
+
+                    let offset = 0;
+                    const encodeNext = () => {
+                        if (offset >= totalFrames) {
+                            enc.flush().then(() => { enc.close(); resolve(); }).catch(reject);
+                            return;
+                        }
+                        const frames = Math.min(CHUNK_FRAMES, totalFrames - offset);
+                        const timestampUs = Math.round(offset * 1_000_000 / sampleRate);
+
+                        // Build interleaved float32 PCM for this chunk
+                        const pcm = new Float32Array(frames * numberOfChannels);
+                        for (let ch = 0; ch < numberOfChannels; ch++) {
+                            const channelData = audioBuffer.getChannelData(ch);
+                            for (let i = 0; i < frames; i++) {
+                                pcm[i * numberOfChannels + ch] = channelData[offset + i] || 0;
+                            }
+                        }
+
+                        const audioData = new AudioData({
+                            format: 'f32',
+                            sampleRate,
+                            numberOfFrames: frames,
+                            numberOfChannels,
+                            timestamp: timestampUs,
+                            data: pcm
+                        });
+                        enc.encode(audioData);
+                        audioData.close();
+                        offset += frames;
+                        // Yield to event loop every 16 chunks to avoid blocking
+                        if (offset % (CHUNK_FRAMES * 16) === 0) {
+                            setTimeout(encodeNext, 0);
+                        } else {
+                            encodeNext();
+                        }
+                    };
+                    encodeNext();
+                });
+                setAudioStatus(`Hang bemuxolva: ${audioChunkCount} AAC chunk`);
             }
         }
 
