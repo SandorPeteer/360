@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.6</title>
+    <title>360 HW Record Minimal v1.7</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -66,7 +66,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.6 fixed music gain</span><br>
+                    Build: <span>v1.7 s16 music mux</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1147,15 +1147,16 @@
 
                 for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
                     const frames = Math.min(chunkFrames, totalFrames - offset);
-                    const data = new Float32Array(frames * channels);
+                    const data = new Int16Array(frames * channels);
                     for (let i = 0; i < frames; i++) {
                         for (let ch = 0; ch < channels; ch++) {
                             const sourceFrame = (offset + i) % audioBuffer.length;
-                            data[i * channels + ch] = (channelData[ch][sourceFrame] || 0) * musicVolume;
+                            const sample = Math.max(-1, Math.min(1, (channelData[ch][sourceFrame] || 0) * musicVolume));
+                            data[i * channels + ch] = sample < 0 ? Math.round(sample * 32768) : Math.round(sample * 32767);
                         }
                     }
                     const audioData = new AudioData({
-                        format: 'f32',
+                        format: 's16',
                         sampleRate,
                         numberOfFrames: frames,
                         numberOfChannels: channels,
@@ -1168,7 +1169,7 @@
                 }
                 await encoder.flush();
                 encoder.close();
-                setAudioStatus(chunkCount > 0 ? `Music muxed: ${chunkCount} AAC chunks` : 'Music mux produced 0 chunks');
+                setAudioStatus(chunkCount > 0 ? `Music muxed: ${chunkCount} s16 AAC chunks` : 'Music mux produced 0 chunks');
                 return chunkCount;
             }
 
