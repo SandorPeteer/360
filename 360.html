@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v0.6</title>
+    <title>360 HW Record Minimal v0.7</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -54,7 +54,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v0.6 portrait no calibration</span><br>
+                    Build: <span>v0.7 raw camera contain</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Actual: <span id="actualRes">-</span><br>
                     Aspect: <span id="statusAspect">-</span><br>
@@ -82,7 +82,7 @@
             </div>
             <div class="row">
                 <label for="audioMixFile">Audio file (mix)</label>
-                <input id="audioMixFile" type="file" accept="audio/*">
+                <input id="audioMixFile" type="file" accept="audio/*,audio/mp4,audio/x-m4a,.m4a,.mp4,.aac">
             </div>
             <div class="row">
                 <label for="mixBalance">Audio mix (mic ↔ file)</label>
@@ -222,20 +222,14 @@
         function drawVideoCover(ctx2, videoEl, dstW, dstH) {
             const vw = videoEl.videoWidth || dstW;
             const vh = videoEl.videoHeight || dstH;
-            const srcAspect = vw / vh;
-            const dstAspect = dstW / dstH;
-            let sx = 0;
-            let sy = 0;
-            let sw = vw;
-            let sh = vh;
-            if (srcAspect > dstAspect) {
-                sw = Math.round(vh * dstAspect);
-                sx = Math.round((vw - sw) / 2);
-            } else {
-                sh = Math.round(vw / dstAspect);
-                sy = Math.round((vh - sh) / 2);
-            }
-            ctx2.drawImage(videoEl, sx, sy, sw, sh, 0, 0, dstW, dstH);
+            const scale = Math.min(dstW / vw, dstH / vh);
+            const dw = Math.round(vw * scale);
+            const dh = Math.round(vh * scale);
+            const dx = Math.round((dstW - dw) / 2);
+            const dy = Math.round((dstH - dh) / 2);
+            ctx2.fillStyle = '#000';
+            ctx2.fillRect(0, 0, dstW, dstH);
+            ctx2.drawImage(videoEl, 0, 0, vw, vh, dx, dy, dw, dh);
         }
 
         function drawOverlayToCanvas(ctx2, w, h) {
