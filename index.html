@@ -299,7 +299,7 @@
         function drawVideoCover(ctx2, videoEl, dstW, dstH) {
             const vw = videoEl.videoWidth || dstW;
             const vh = videoEl.videoHeight || dstH;
-            const scale = Math.min(dstW / vw, dstH / vh);
+            const scale = Math.max(dstW / vw, dstH / vh);
             const dw = Math.round(vw * scale);
             const dh = Math.round(vh * scale);
             const dx = Math.round((dstW - dw) / 2);
@@ -338,12 +338,8 @@
 
         function startDrawLoop() {
             stopDrawLoop();
-            const loop = (ts) => {
-                const frameMs = 1000 / Math.max(1, previewFps);
-                if (ts - lastDraw >= frameMs) {
-                    lastDraw = ts;
-                    drawFrame();
-                }
+            const loop = () => {
+                drawFrame();
                 drawRaf = requestAnimationFrame(loop);
             };
             drawRaf = requestAnimationFrame(loop);
@@ -724,8 +720,8 @@
             try {
                 if (boothStep === 'camera') {
                     if (startOverlay) startOverlay.classList.add('hidden');
-                    // Fullscreen és kamera egyszerre – nem kell egymásra várni
-                    await Promise.all([requestFullscreenMode(), startCamera()]);
+                    await requestFullscreenMode();
+                    await startCamera();
                     return;
                 }
                 await requestFullscreenMode();
