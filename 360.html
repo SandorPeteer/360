@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.7</title>
+    <title>360 HW Record Minimal v1.8</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -66,7 +66,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.7 s16 music mux</span><br>
+                    Build: <span>v1.8 audio track mux</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -292,6 +292,13 @@
             drawOverlayToCanvas(ctx, canvas.width, canvas.height);
         }
 
+        async function waitForStablePreviewFrames(count = 4) {
+            for (let i = 0; i < count; i++) {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                drawFrame();
+            }
+        }
+
         function startDrawLoop() {
             stopDrawLoop();
             const loop = (ts) => {
@@ -407,8 +414,8 @@
         async function detectWebCodecsSupport() {
             const missing = [];
             if (!('VideoEncoder' in window)) missing.push('VideoEncoder');
+            if (!('VideoFrame' in window)) missing.push('VideoFrame');
             if (typeof Mp4Muxer === 'undefined') missing.push('mp4-muxer');
-            if (!canvas.captureStream) missing.push('canvas.captureStream');
 
             if (missing.length) {
                 useWebCodecs = false;
@@ -553,9 +560,7 @@
                 : Math.max(8_000_000, Math.round(canvas.width * canvas.height * fps * 0.07));
             if (statusFps) statusFps.textContent = String(Math.round(fps));
             if (statusBitrate) statusBitrate.textContent = `${(bitrate / 1_000_000).toFixed(1)} Mbps`;
-            const canvasStream = canvas.captureStream(fps);
-            activeCanvasStream = canvasStream;
-            const videoTrack = canvasStream.getVideoTracks()[0];
+            await waitForStablePreviewFrames(4);
             if (!useWebCodecs) {
                 logMsg('WebCodecs required. Recording blocked.');
                 cleanupRecordingStream();
@@ -566,16 +571,16 @@
                 logMsg('AudioEncoder missing, music cannot be saved into MP4.');
                 setAudioStatus('No AudioEncoder: MP4 will be silent');
             }
+            let musicTrack = null;
             if (audioFileBuffer) {
-                buildMixedAudioTrack(null, audioFileBuffer);
+                musicTrack = buildMixedAudioTrack(null, audioFileBuffer);
             }
-            recorder = new WebCodecsRecorder(videoTrack, null, {
+            recorder = new WebCodecsRecorder(track, musicTrack, {
                 width: canvas.width,
                 height: canvas.height,
                 framerate: fps,
                 videoBitsPerSecond: bitrate,
-                sourceCanvas: canvas,
-                audioBuffer: audioFileBuffer
+                sourceCanvas: canvas
             });
             try {
                 await recorder.start();
@@ -696,6 +701,7 @@
             if (fileBuffer) {
                 const fileSource = recordAudioCtx.createBufferSource();
                 fileSource.buffer = fileBuffer;
+                fileSource.loop = true;
                 fileSource.connect(mixGainFile);
                 fileSource.connect(monitorGainFile);
                 mixGainFile.connect(dest);
@@ -911,7 +917,7 @@
             }
 
             async start() {
-                const settings = this.videoTrack.getSettings();
+                const settings = this.videoTrack && this.videoTrack.getSettings ? this.videoTrack.getSettings() : {};
                 const width = this.options.width || settings.width || 1280;
                 const height = this.options.height || settings.height || 720;
                 const framerate = this.options.framerate || settings.frameRate || 30;
@@ -953,24 +959,16 @@
 
                 await this.startAudioEncoding(audioInfo);
 
-                if (typeof MediaStreamTrackProcessor !== 'undefined') {
+                if (this.sourceCanvas) {
+                    this.captureFramesWithCanvas(width, height, framerate);
+                } else if (this.videoTrack && typeof MediaStreamTrackProcessor !== 'undefined') {
                     const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
                     this.reader = processor.readable.getReader();
                     this.processFrames();
-                } else {
-                    this.captureFramesWithCanvas(width, height, framerate);
                 }
             }
 
             getAudioInfo() {
-                const audioBuffer = this.options.audioBuffer || null;
-                if (audioBuffer && 'AudioEncoder' in window) {
-                    return {
-                        codec: 'aac',
-                        numberOfChannels: Math.min(2, audioBuffer.numberOfChannels || 2),
-                        sampleRate: audioBuffer.sampleRate || 48000
-                    };
-                }
                 if (!this.audioTrack || !('AudioEncoder' in window) || typeof MediaStreamTrackProcessor === 'undefined') return null;
                 const settings = this.audioTrack.getSettings();
                 return {
@@ -982,7 +980,6 @@
 
             async startAudioEncoding(audioInfo) {
                 if (!audioInfo) return;
-                if (this.options.audioBuffer) return;
                 if (typeof MediaStreamTrackProcessor === 'undefined') return;
                 const bitrate = this.options.audioBitsPerSecond || 128000;
                 const config = {
@@ -1004,6 +1001,7 @@
                 this.audioEncoder.configure(finalConfig);
                 const processor = new MediaStreamTrackProcessor({ track: this.audioTrack });
                 this.audioReader = processor.readable.getReader();
+                setAudioStatus('Music track encoder running');
                 this.processAudio();
             }
 
@@ -1099,80 +1097,6 @@
                 }
             }
 
-            async encodeAudioBuffer(durationSec) {
-                const audioBuffer = this.options.audioBuffer || null;
-                if (!audioBuffer) return 0;
-                if (!audioBuffer.length) {
-                    setAudioStatus('Music buffer is empty');
-                    return 0;
-                }
-                if (!('AudioEncoder' in window)) {
-                    setAudioStatus('No AudioEncoder: music not saved');
-                    return 0;
-                }
-                const channels = Math.min(2, audioBuffer.numberOfChannels || 1);
-                const sampleRate = audioBuffer.sampleRate || 48000;
-                const bitrate = this.options.audioBitsPerSecond || 128000;
-                const config = {
-                    codec: 'mp4a.40.2',
-                    sampleRate,
-                    numberOfChannels: channels,
-                    bitrate
-                };
-                const supported = await AudioEncoder.isConfigSupported(config);
-                if (!supported || !supported.supported) {
-                    setAudioStatus('AAC AudioEncoder unsupported');
-                    return 0;
-                }
-                const finalConfig = supported.config || config;
-                let chunkCount = 0;
-                const encoder = new AudioEncoder({
-                    output: (chunk, metadata) => {
-                        this.muxer.addAudioChunk(chunk, metadata);
-                        chunkCount++;
-                        this.fileAudioChunkCount++;
-                        recBytes += chunk.byteLength || 0;
-                    },
-                    error: (e) => console.error('[WebCodecs] File audio encode error:', e)
-                });
-                encoder.configure(finalConfig);
-
-                const totalFrames = Math.max(1, Math.floor(durationSec * sampleRate));
-                const chunkFrames = 1024;
-                const channelData = [];
-                const musicVolume = getMusicVolume();
-                for (let ch = 0; ch < channels; ch++) {
-                    channelData.push(audioBuffer.getChannelData(Math.min(ch, audioBuffer.numberOfChannels - 1)));
-                }
-
-                for (let offset = 0; offset < totalFrames; offset += chunkFrames) {
-                    const frames = Math.min(chunkFrames, totalFrames - offset);
-                    const data = new Int16Array(frames * channels);
-                    for (let i = 0; i < frames; i++) {
-                        for (let ch = 0; ch < channels; ch++) {
-                            const sourceFrame = (offset + i) % audioBuffer.length;
-                            const sample = Math.max(-1, Math.min(1, (channelData[ch][sourceFrame] || 0) * musicVolume));
-                            data[i * channels + ch] = sample < 0 ? Math.round(sample * 32768) : Math.round(sample * 32767);
-                        }
-                    }
-                    const audioData = new AudioData({
-                        format: 's16',
-                        sampleRate,
-                        numberOfFrames: frames,
-                        numberOfChannels: channels,
-                        timestamp: Math.round((offset / sampleRate) * 1_000_000),
-                        duration: Math.round((frames / sampleRate) * 1_000_000),
-                        data
-                    });
-                    encoder.encode(audioData);
-                    audioData.close();
-                }
-                await encoder.flush();
-                encoder.close();
-                setAudioStatus(chunkCount > 0 ? `Music muxed: ${chunkCount} s16 AAC chunks` : 'Music mux produced 0 chunks');
-                return chunkCount;
-            }
-
             captureFramesWithCanvas(width, height, framerate) {
                 const canvasRef = this.sourceCanvas;
                 if (!canvasRef) {
@@ -1229,21 +1153,14 @@
                         console.warn('[WebCodecs] Video flush/close error:', e);
                     }
                 }
-                const durationSec = this.frameCounter > 0
-                    ? this.frameCounter / Math.max(1, this.framerate || 30)
-                    : Math.max(0.1, (performance.now() - this.startedAtMs) / 1000);
-                try {
-                    await this.encodeAudioBuffer(durationSec);
-                } catch (e) {
-                    console.error('[WebCodecs] File audio mux failed:', e);
-                    setAudioStatus(`Music mux failed: ${e && e.message ? e.message : 'error'}`);
-                }
                 if (this.audioEncoder && this.audioEncoder.state === 'configured') {
                     try {
                         await this.audioEncoder.flush();
                         this.audioEncoder.close();
+                        setAudioStatus(this.audioChunkCount > 0 ? `Music track muxed: ${this.audioChunkCount} AAC chunks` : 'Music track produced 0 chunks');
                     } catch (e) {
                         console.warn('[WebCodecs] Audio flush/close error:', e);
+                        setAudioStatus(`Music track mux failed: ${e && e.message ? e.message : 'error'}`);
                     }
                 }
                 if (this.muxer) {
