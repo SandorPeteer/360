@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.12</title>
+    <title>360 HW Record Minimal v1.13</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.12</span><br>
+                    Build: <span>v1.13</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -353,10 +353,15 @@
             }
         }
 
+        // Single unified RAF loop: draws to canvas AND captures frame for encoding if recording
+        // This ensures capture always sees a freshly drawn canvas with no race condition
+        let captureCallback = null; // set by WebCodecsRecorder during recording
+
         function startDrawLoop() {
             stopDrawLoop();
-            const loop = () => {
+            const loop = (ts) => {
                 drawFrame();
+                if (captureCallback) captureCallback(ts);
                 drawRaf = requestAnimationFrame(loop);
             };
             drawRaf = requestAnimationFrame(loop);
@@ -595,7 +600,15 @@
         }
 
         async function startRecordingMediaRecorder(fps, bitrate) {
+            // Build audio track BEFORE creating the canvas stream so AudioContext is warm
             const musicTrack = audioFileBuffer ? buildMixedAudioTrack(null, audioFileBuffer) : null;
+
+            // Resume AudioContext immediately (iOS requires user-gesture context, already have one)
+            if (recordAudioCtx && recordAudioCtx.state === 'suspended') {
+                await recordAudioCtx.resume().catch(() => {});
+            }
+
+            // captureStream with exact target fps for minimal timestamp jitter
             const canvasStream = canvas.captureStream(fps);
             if (musicTrack) canvasStream.addTrack(musicTrack);
             activeCanvasStream = canvasStream;
@@ -614,12 +627,13 @@
                 handleRecordingComplete(blob, ext);
                 mediaRecorderChunks = [];
             };
-            mr.start(500);
-            mediaRecorderFallback = mr;
+            // Start audio sources synchronized with MediaRecorder start
             startAudioMixPlayback();
+            mr.start(33); // ~2 frames per chunk at 60fps, minimizes A/V drift
+            mediaRecorderFallback = mr;
             encoderStatus.textContent = `MediaRecorder ${mime} ${canvas.width}x${canvas.height}@${fps}`;
-            setAudioStatus(musicTrack ? 'Music → MediaRecorder stream' : 'No music');
-            logMsg('Recording (MediaRecorder)...');
+            setAudioStatus(musicTrack ? 'Zene → MediaRecorder stream' : 'Nincs zene');
+            logMsg('Felvétel...');
         }
 
         async function runCountdown(from = 3) {
@@ -720,9 +734,12 @@
             if (processingOverlay) processingOverlay.classList.remove('hidden');
 
             if (mediaRecorderFallback) {
-                try {
-                    mediaRecorderFallback.stop();
-                } catch (_) {}
+                await new Promise((resolve) => {
+                    const mr = mediaRecorderFallback;
+                    const orig = mr.onstop;
+                    mr.onstop = (ev) => { if (orig) orig(ev); resolve(); };
+                    try { mr.stop(); } catch (_) { resolve(); }
+                });
                 mediaRecorderFallback = null;
                 cleanupRecordingStream();
                 stopAudioMix();
@@ -1022,18 +1039,21 @@
                 });
                 this.encoder.configure(this.chosenConfig);
 
-                if (this.sourceCanvas && typeof MediaStreamTrackProcessor !== 'undefined') {
+                if (typeof MediaStreamTrackProcessor !== 'undefined' && this.sourceCanvas) {
+                    // Chrome / desktop: GPU path via captureStream → MediaStreamTrackProcessor
                     const canvasTrack = this.sourceCanvas.captureStream(framerate).getVideoTracks()[0];
                     this.canvasCaptureTrack = canvasTrack;
                     const processor = new MediaStreamTrackProcessor({ track: canvasTrack });
                     this.reader = processor.readable.getReader();
                     this.processFrames();
-                } else if (this.sourceCanvas) {
-                    this.captureFramesWithCanvas(width, height, framerate);
-                } else if (this.videoTrack && typeof MediaStreamTrackProcessor !== 'undefined') {
+                } else if (typeof MediaStreamTrackProcessor !== 'undefined' && this.videoTrack) {
+                    // Chrome: direct camera track processor
                     const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
                     this.reader = processor.readable.getReader();
                     this.processFrames();
+                } else {
+                    // iPad Safari: hook into the unified draw loop for zero-jitter capture
+                    this._installCanvasHook(framerate);
                 }
             }
 
@@ -1098,40 +1118,37 @@
                 }
             }
 
-            captureFramesWithCanvas(width, height, framerate) {
+            _installCanvasHook(framerate) {
+                // iPad Safari path: capture from canvas inside the unified draw loop.
+                // Timestamps are computed monotonically per frame counter to avoid jitter.
                 const canvasRef = this.sourceCanvas;
-                if (!canvasRef) {
-                    throw new Error('Canvas source missing for fallback capture.');
-                }
-                const frameInterval = 1000 / framerate;
-                let lastFrameTime = 0;
-                const captureFrame = (timestamp) => {
-                    if (!this.isRecording) return;
-                    const elapsed = timestamp - lastFrameTime;
-                    if (elapsed >= frameInterval) {
-                        lastFrameTime = timestamp;
-                        try {
-                            if (this.encoder.state === 'configured' && this.encoder.encodeQueueSize < 2) {
-                                const frame = new VideoFrame(canvasRef, {
-                                    timestamp: this.frameCounter * (1_000_000 / framerate),
-                                    duration: 1_000_000 / framerate
-                                });
-                                const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
-                                this.encoder.encode(frame, { keyFrame });
-                                this.frameCounter++;
-                                frame.close();
-                            }
-                        } catch (e) {
-                            console.error('[WebCodecs] Frame capture error:', e);
-                        }
+                if (!canvasRef) throw new Error('Canvas source missing.');
+                const frameDurUs = 1_000_000 / framerate;
+                const frameIntervalMs = 1000 / framerate;
+                let lastCaptureMs = -Infinity;
+
+                captureCallback = (rafTs) => {
+                    if (!this.isRecording || this.encoder.state !== 'configured') return;
+                    const elapsed = rafTs - lastCaptureMs;
+                    if (elapsed < frameIntervalMs - 1) return; // not yet time for next frame
+                    lastCaptureMs = rafTs;
+                    // Skip frame if encoder is backed up (avoids RAM growth and timestamp drift)
+                    if (this.encoder.encodeQueueSize > 1) return;
+                    try {
+                        const tsUs = Math.round(this.frameCounter * frameDurUs);
+                        const frame = new VideoFrame(canvasRef, { timestamp: tsUs, duration: Math.round(frameDurUs) });
+                        this.encoder.encode(frame, { keyFrame: this.frameCounter % this.keyFrameIntervalFrames === 0 });
+                        this.frameCounter++;
+                        frame.close();
+                    } catch (e) {
+                        console.warn('[WebCodecs] canvas hook encode error:', e);
                     }
-                    requestAnimationFrame(captureFrame);
                 };
-                requestAnimationFrame(captureFrame);
             }
 
             async stop() {
                 this.isRecording = false;
+                captureCallback = null; // unhook from unified draw loop
                 if (this.canvasCaptureTrack) {
                     try { this.canvasCaptureTrack.stop(); } catch (_) {}
                     this.canvasCaptureTrack = null;
