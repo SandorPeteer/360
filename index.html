@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.10</title>
+    <title>360 HW Record Minimal v1.11</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -68,7 +68,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.10 two-step start</span><br>
+                    Build: <span>v1.11</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1138,16 +1138,16 @@
                     if (elapsed >= frameInterval) {
                         lastFrameTime = timestamp;
                         try {
-                            const frame = new VideoFrame(canvasRef, {
-                                timestamp: this.frameCounter * (1_000_000 / framerate),
-                                duration: 1_000_000 / framerate
-                            });
-                            if (this.encoder.state === 'configured') {
+                            if (this.encoder.state === 'configured' && this.encoder.encodeQueueSize < 4) {
+                                const frame = new VideoFrame(canvasRef, {
+                                    timestamp: this.frameCounter * (1_000_000 / framerate),
+                                    duration: 1_000_000 / framerate
+                                });
                                 const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
                                 this.encoder.encode(frame, { keyFrame });
                                 this.frameCounter++;
+                                frame.close();
                             }
-                            frame.close();
                         } catch (e) {
                             console.error('[WebCodecs] Frame capture error:', e);
                         }
