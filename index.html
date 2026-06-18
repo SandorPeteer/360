@@ -1,1257 +1,778 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="hu">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.10</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#0b0f14">
-    <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>KANDÓ 360 Booth</title>
+    <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"
+            onerror="this.onerror=null;this.src='https://unpkg.com/mp4-muxer@5.2.2/build/mp4-muxer.js'"></script>
     <style>
-        * { box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; overflow: hidden; }
-        body { margin: 0; font-family: system-ui, sans-serif; background: #0b0f14; color: #111; }
-        #app { position: fixed; inset: 0; width: 100vw; height: 100dvh; overflow: hidden; }
-        .panel { background: #fff; border: 1px solid #d3d9e0; border-radius: 10px; padding: 10px; box-shadow: 0 4px 14px rgba(15,23,42,.08); }
-        .row { margin-bottom: 10px; }
-        label { font-size: 12px; font-weight: 600; color: #334155; }
-        select, input, button { width: 100%; margin-top: 4px; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc; }
-        button { cursor: pointer; font-weight: 700; background: #0f172a; color: #f8fafc; }
-        button:disabled { opacity: .6; cursor: not-allowed; }
-        .buttons { display: grid; gap: 8px; }
-        #preview, #playback { max-width: 100%; max-height: 100%; background: #0b0f14; display: block; }
-#menuBtn { position: fixed; top: 14px; right: 14px; z-index: 20; width: 44px; height: 44px; border-radius: 10px; }
-        #menuBackdrop { position: fixed; inset: 0; background: rgba(3, 7, 18, .45); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 14; }
-        #menuBackdrop.open { opacity: 1; pointer-events: auto; }
-        #menuDrawer { position: fixed; top: 0; right: 0; height: 100dvh; width: min(360px, 92vw); background: #eef1f4; transform: translateX(100%); transition: transform .2s ease; z-index: 15; padding: 12px; overflow: auto; }
-        #menuHeader { display: flex; justify-content: flex-end; }
-        #menuClose { width: 36px; height: 36px; border-radius: 8px; }
-        #menuDrawer.open { transform: translateX(0); }
-        #recBtnWrap { position: fixed; right: 16px; bottom: 16px; z-index: 20; }
-        #btnRecord { width: 140px; height: 44px; border-radius: 999px; }
-        #videoWrap { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: flex-start; padding: 0 72px 0 0; overflow: hidden; }
-        #startOverlay { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; background: #0b0f14; }
-        #startOverlay.hidden { display: none; }
-        #btnStartBooth { width: min(420px, 86vw); min-height: 86px; border-radius: 18px; font-size: 24px; letter-spacing: .08em; background: #16a34a; color: #fff; border: 0; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
-        #btnStartBooth[data-step="fullscreen"] { background: #2563eb; }
-        #btnStartBooth[data-step="camera"] { background: #16a34a; }
-        #boothStepText { color: #cbd5e1; font-size: 13px; letter-spacing: .04em; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0a; font-family: system-ui, -apple-system, sans-serif; }
+
+        /* ── PREVIEW ── */
+        #wrap {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #preview {
+            display: block;
+            /* méret JS-ből jön, de alapból tele van */
+            max-width: 100vw; max-height: 100dvh;
+        }
+
+        /* ── REC GOMB – nagy, középre lent ── */
+        #btnRecord {
+            position: fixed;
+            bottom: max(36px, env(safe-area-inset-bottom, 36px));
+            left: 50%; transform: translateX(-50%);
+            width: 88px; height: 88px; border-radius: 50%;
+            border: 5px solid #fff;
+            background: #e8000d;
+            cursor: pointer; z-index: 50;
+            box-shadow: 0 8px 32px rgba(232,0,13,.5);
+            transition: transform .12s, box-shadow .12s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #btnRecord:active { transform: translateX(-50%) scale(.9); box-shadow: 0 4px 16px rgba(232,0,13,.4); }
+        /* belső ikon – kör = record, négyzet = stop */
+        #btnRecord::after {
+            content: '';
+            width: 32px; height: 32px;
+            background: #fff; border-radius: 50%;
+            transition: border-radius .2s;
+        }
+        #btnRecord.recording { background: #222; box-shadow: 0 8px 32px rgba(0,0,0,.4); }
+        #btnRecord.recording::after { border-radius: 5px; width: 28px; height: 28px; }
+
+        /* ── BEÁLLÍTÁSOK GOMB – jobb felső ── */
+        #btnSettings {
+            position: fixed;
+            top: max(18px, env(safe-area-inset-top, 18px)); right: 18px;
+            width: 48px; height: 48px; border-radius: 14px;
+            background: rgba(255,255,255,.12); border: 1.5px solid rgba(255,255,255,.25);
+            color: #fff; font-size: 22px; cursor: pointer; z-index: 50;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* ── ENCODER BADGE – bal felső ── */
+        #encBadge {
+            position: fixed;
+            top: max(18px, env(safe-area-inset-top, 18px)); left: 18px;
+            padding: 5px 11px; border-radius: 20px;
+            font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; z-index: 50;
+            border: 1.5px solid; display: none;
+        }
+        #encBadge.hw  { color: #00e676; border-color: #00e676; background: rgba(0,230,118,.12); display: block; }
+        #encBadge.mr  { color: #ffb300; border-color: #ffb300; background: rgba(255,179,0,.12); display: block; }
+
+        /* ── STATUS SZÖVEG – alul középen a REC gomb felett ── */
+        #statusText {
+            position: fixed;
+            bottom: calc(max(36px, env(safe-area-inset-bottom, 36px)) + 100px);
+            left: 50%; transform: translateX(-50%);
+            color: rgba(255,255,255,.75); font-size: 14px; font-weight: 600;
+            letter-spacing: .04em; text-align: center;
+            white-space: nowrap; z-index: 50; pointer-events: none;
+        }
+
+        /* ── VISSZASZÁMLÁLÁS ── */
+        #countdown {
+            position: fixed; inset: 0; z-index: 80; pointer-events: none;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 38vw; font-weight: 900; color: #fff;
+            text-shadow: 0 0 80px rgba(0,0,0,.9);
+            opacity: 0; transition: opacity .15s;
+        }
+        #countdown.on { opacity: 1; }
+
+        /* ── START OVERLAY ── */
+        #startOverlay {
+            position: fixed; inset: 0; z-index: 100;
+            background: #0a0a0a;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 24px;
+        }
+        #startOverlay.gone { display: none; }
+        #startOverlay h1 {
+            font-size: clamp(26px, 6vw, 42px); font-weight: 900;
+            color: #fff; letter-spacing: .08em; text-transform: uppercase;
+            text-align: center;
+        }
+        #startOverlay p { color: #888; font-size: 15px; text-align: center; }
+        #btnStart {
+            width: min(340px, 82vw); height: 76px;
+            border-radius: 20px; border: none;
+            background: linear-gradient(135deg, #e8000d, #ff4d00);
+            color: #fff; font-size: 24px; font-weight: 900;
+            letter-spacing: .06em; cursor: pointer;
+            box-shadow: 0 12px 40px rgba(232,0,13,.45);
+        }
+
+        /* ── SETTINGS DRAWER ── */
+        #settingsBackdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,.6);
+            z-index: 60; opacity: 0; pointer-events: none; transition: opacity .2s;
+        }
+        #settingsBackdrop.on { opacity: 1; pointer-events: auto; }
+        #settingsDrawer {
+            position: fixed; top: 0; right: -110%;
+            width: min(360px, 92vw); height: 100dvh;
+            background: #141414; color: #eee;
+            z-index: 70; padding: 24px 20px;
+            overflow-y: auto; transition: right .25s ease;
+        }
+        #settingsDrawer.on { right: 0; }
+        #settingsDrawer h2 {
+            font-size: 13px; letter-spacing: .1em; text-transform: uppercase;
+            color: #00e676; margin-bottom: 20px;
+        }
+        #btnCloseSettings {
+            float: right; background: transparent;
+            border: 1.5px solid #333; color: #eee;
+            width: 34px; height: 34px; border-radius: 10px;
+            font-size: 18px; cursor: pointer; margin-top: -4px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .srow { margin-bottom: 16px; }
+        .srow label {
+            display: block; font-size: 10px; color: #666;
+            text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; font-weight: 700;
+        }
+        .srow select, .srow input[type="file"], .srow input[type="number"] {
+            width: 100%; padding: 9px 10px; border-radius: 10px;
+            border: 1.5px solid #2a2a2a; background: #1e1e1e; color: #eee;
+            font-size: 13px; appearance: none; -webkit-appearance: none;
+        }
+        #sLog { font-size: 11px; color: #555; margin-top: 12px; line-height: 1.6; min-height: 16px; }
+
+        /* ── KÉSZ VIDEÓ UI ── */
+        #doneOverlay {
+            position: fixed; inset: 0; z-index: 90;
+            background: rgba(0,0,0,.92);
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center; gap: 18px;
+        }
+        #doneOverlay.on { display: flex; }
+        #doneOverlay h2 { color: #fff; font-size: 22px; font-weight: 800; }
+        #doneOverlay p  { color: #888; font-size: 13px; }
+        .done-btn {
+            width: min(300px, 80vw); height: 60px; border-radius: 16px; border: none;
+            font-size: 18px; font-weight: 800; cursor: pointer; letter-spacing: .04em;
+        }
+        #btnDownload { background: linear-gradient(135deg,#00c853,#00e676); color: #000; }
+        #btnNewRec    { background: #1e1e1e; color: #eee; border: 1.5px solid #333; }
     </style>
 </head>
-
 <body>
-    <div id="app">
-        <div id="startOverlay">
-            <button id="btnStartBooth" data-step="fullscreen">FULL SCREEN</button>
-            <div id="boothStepText">1/2 FULLSCREEN FIRST</div>
-        </div>
-        <button id="menuBtn" title="Menu">☰</button>
-        <div id="recBtnWrap">
-            <button id="btnRecord" disabled>REC</button>
-        </div>
-        <div id="videoWrap">
-            <canvas id="preview"></canvas>
-            <video id="playback" controls style="display:none"></video>
-        </div>
 
-        <div id="menuBackdrop"></div>
-        <div id="menuDrawer">
-            <div id="menuHeader">
-                <button id="menuClose" title="Close">✕</button>
-            </div>
-            <div class="panel">
-                <div class="row" id="browserWarning" style="display:none; color:#b91c1c;">
-                    WebCodecs video encoder required on this device/browser
-                </div>
-                <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.10 two-step start</span><br>
-                    Encoder: <span id="encoderStatus">Detecting...</span><br>
-                    Audio: <span id="audioStatus">-</span><br>
-                    Actual: <span id="actualRes">-</span><br>
-                    Aspect: <span id="statusAspect">-</span><br>
-                    Rec FPS: <span id="statusFps">-</span><br>
-                    Rec bitrate: <span id="statusBitrate">-</span>
-                </div>
-                <div class="buttons">
-                    <button id="btnStartCam" class="primary">Start camera</button>
-                </div>
-                <div class="row">
-                    <label for="camSelect">Camera</label>
-                    <select id="camSelect"></select>
-                </div>
-            <div class="row">
-                <label>Camera caps</label>
-                <div id="camCaps">-</div>
-            </div>
-            <div class="row">
-                <label for="overlayFile">Overlay PNG</label>
-                <input id="overlayFile" type="file" accept="image/png">
-            </div>
-            <div class="row">
-                <label for="audioMixFile">Audio file (mix)</label>
-                <input id="audioMixFile" type="file" accept="audio/*,audio/mp4,audio/x-m4a,.m4a,.mp4,.aac">
-            </div>
-            <div class="row">
-                <label for="resolution">Resolution</label>
-                <select id="resolution"></select>
-            </div>
-            <div class="row">
-                <label for="codecSelect">Codec</label>
-                <select id="codecSelect">
-                    <option value="auto" selected>Auto (best supported)</option>
-                    <option value="h264-high">H.264 High</option>
-                    <option value="h264-main">H.264 Main</option>
-                    <option value="h264-base">H.264 Baseline</option>
-                </select>
-            </div>
-            <div class="row">
-                <label for="bitrateInput">Avg bitrate (Mbps, 0 = auto)</label>
-                <input id="bitrateInput" type="number" min="0" max="200" value="0">
-            </div>
-            <div class="buttons">
-            </div>
-            <div class="status">
-                <div id="log"></div>
-            </div>
-            <div class="buttons" id="outputActions" style="display:none">
-                <button id="btnOpenOutput">Open in new tab</button>
-                <button id="btnDownloadOutput">Download</button>
-                <button id="btnClearOutput">Clear</button>
-            </div>
-        </div>
+<!-- PREVIEW CANVAS -->
+<div id="wrap"><canvas id="preview"></canvas></div>
+
+<!-- FIXED UI -->
+<div id="encBadge">HW H.264</div>
+<div id="statusText"></div>
+<div id="countdown"></div>
+<button id="btnRecord"></button>
+<button id="btnSettings">⚙️</button>
+
+<!-- START OVERLAY -->
+<div id="startOverlay">
+    <h1>KANDÓ<br>360 BOOTH</h1>
+    <p>Nyomj a gombra a kamera indításához</p>
+    <button id="btnStart">INDÍTÁS</button>
+</div>
+
+<!-- KÉSZ VIDEÓ -->
+<div id="doneOverlay">
+    <h2>✅ Felvétel kész!</h2>
+    <p id="doneInfo"></p>
+    <button class="done-btn" id="btnDownload">⬇️ LETÖLTÉS</button>
+    <button class="done-btn" id="btnNewRec">🔴 ÚJ FELVÉTEL</button>
+</div>
+
+<!-- SETTINGS DRAWER -->
+<div id="settingsBackdrop"></div>
+<div id="settingsDrawer">
+    <button id="btnCloseSettings">✕</button>
+    <h2>Beállítások</h2>
+
+    <div class="srow">
+        <label>Kamera</label>
+        <select id="camSelect"></select>
     </div>
+    <div class="srow">
+        <label>Overlay PNG (alap: KANDO_01.png)</label>
+        <input type="file" id="overlayFile" accept="image/png">
+    </div>
+    <div class="srow">
+        <label>Zene (alap: beégetett .m4a)</label>
+        <input type="file" id="musicFile" accept="audio/*,.m4a,.mp3,.aac">
+    </div>
+    <div class="srow">
+        <label>Visszaszámlálás (másodperc)</label>
+        <input type="number" id="inputCountdown" value="3" min="0" max="10">
+    </div>
+    <div id="sLog"></div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"
-        onerror="this.onerror=null;this.src='https://unpkg.com/mp4-muxer@5.2.2/build/mp4-muxer.js'"></script>
-    <script>
-        const preview = document.getElementById('preview');
-        const canvas = preview;
-        const ctx = canvas.getContext('2d');
-        const playback = document.getElementById('playback');
-        const camSelect = document.getElementById('camSelect');
-        const camCaps = document.getElementById('camCaps');
-        const overlayFile = document.getElementById('overlayFile');
-        const audioMixFile = document.getElementById('audioMixFile');
-        const resolution = document.getElementById('resolution');
-        const codecSelect = document.getElementById('codecSelect');
-        const btnStartCam = document.getElementById('btnStartCam');
-        const btnStartBooth = document.getElementById('btnStartBooth');
-        const boothStepText = document.getElementById('boothStepText');
-        const startOverlay = document.getElementById('startOverlay');
-        const btnRecord = document.getElementById('btnRecord');
-        const encoderStatus = document.getElementById('encoderStatus');
-        const actualRes = document.getElementById('actualRes');
-        const audioStatus = document.getElementById('audioStatus');
-        const statusFps = document.getElementById('statusFps');
-        const statusBitrate = document.getElementById('statusBitrate');
-        const statusAspect = document.getElementById('statusAspect');
-        const browserWarning = document.getElementById('browserWarning');
-        const logEl = document.getElementById('log');
-        const outputActions = document.getElementById('outputActions');
-        const btnOpenOutput = document.getElementById('btnOpenOutput');
-        const btnDownloadOutput = document.getElementById('btnDownloadOutput');
-        const btnClearOutput = document.getElementById('btnClearOutput');
-        const menuBtn = document.getElementById('menuBtn');
-        const menuDrawer = document.getElementById('menuDrawer');
-        const menuBackdrop = document.getElementById('menuBackdrop');
-        const menuClose = document.getElementById('menuClose');
-        const bitrateInput = document.getElementById('bitrateInput');
+<script>
+'use strict';
 
-        const liveVideo = document.createElement('video');
-        liveVideo.autoplay = true;
-        liveVideo.muted = true;
-        liveVideo.playsInline = true;
+// ── KONFIG ────────────────────────────────────────────────────────────────────
+const OUT_W        = 720;
+const OUT_H        = 1280;
+const TARGET_FPS   = 60;
+const DEFAULT_OVERLAY = 'KANDO_01.png';
+const DEFAULT_AUDIO   = 'Lady Gaga - Abracadabra (Dj Dark Remix) [Htz_v_xiIRc].m4a';
 
-        let cameraStream = null;
-        let drawRaf = 0;
-        let lastDraw = 0;
-        let overlayReady = false;
-        let overlayCrop = null;
-        const overlayImg = new Image();
-        let currentBlobUrl = null;
-        let recorder = null;
-        let mediaRecorderFallback = null;
-        let mediaRecorderChunks = [];
-        let activeCanvasStream = null;
-        let isRecording = false;
-        let boothStep = 'camera';
-        let useWebCodecs = false;
-        let recStartMs = 0;
-        let recBytes = 0;
-        let recStatsTimer = 0;
-        let previewFps = 30;
-        let audioFileBuffer = null;
-        let audioFileName = '';
-        let recordAudioCtx = null;
-        let recordAudioSources = [];
-        let mixGainMic = null;
-        let mixGainFile = null;
-        let monitorGainFile = null;
-        const OUTPUT_WIDTH = 720;
-        const OUTPUT_HEIGHT = 1280;
-        const TARGET_FPS = 60;
-        const DEFAULT_OVERLAY_URL = 'KANDO_01.png';
-        const DEFAULT_AUDIO_URL = 'Lady Gaga - Abracadabra (Dj Dark Remix) [Htz_v_xiIRc].m4a';
-        let activeCameraDeviceId = '';
+// ── ÁLLAPOT ───────────────────────────────────────────────────────────────────
+let cameraStream  = null;
+let isRecording   = false;
+let useHW         = false;   // WebCodecs VideoEncoder elérhető
+let hwRecorder    = null;    // HW: { encoder, muxer, rafId }
+let mrRecorder    = null;    // SW fallback: MediaRecorder
+let mrChunks      = [];
+let audioBuffer   = null;
+let audioFileName = '';
+let recAudioCtx   = null;
+let recAudioSrcs  = [];
+let drawRafId     = 0;
+let cdTimer       = null;
+let lastBlob      = null;
+let lastExt       = 'mp4';
+let recBytes      = 0;
 
-        function logMsg(msg) {
-            logEl.textContent = msg;
-        }
+const overlayImg = new Image();
+let overlayReady = false;
 
-        function setAudioStatus(msg) {
-            if (audioStatus) audioStatus.textContent = msg || '-';
-        }
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const canvas          = document.getElementById('preview');
+const ctx             = canvas.getContext('2d', { alpha: false });
+const btnRecord       = document.getElementById('btnRecord');
+const btnSettings     = document.getElementById('btnSettings');
+const btnStart        = document.getElementById('btnStart');
+const startOverlay    = document.getElementById('startOverlay');
+const countdown       = document.getElementById('countdown');
+const statusText      = document.getElementById('statusText');
+const encBadge        = document.getElementById('encBadge');
+const settingsBackdrop= document.getElementById('settingsBackdrop');
+const settingsDrawer  = document.getElementById('settingsDrawer');
+const btnCloseSettings= document.getElementById('btnCloseSettings');
+const camSelect       = document.getElementById('camSelect');
+const overlayFile     = document.getElementById('overlayFile');
+const musicFile       = document.getElementById('musicFile');
+const inputCountdown  = document.getElementById('inputCountdown');
+const sLog            = document.getElementById('sLog');
+const doneOverlay     = document.getElementById('doneOverlay');
+const doneInfo        = document.getElementById('doneInfo');
+const btnDownload     = document.getElementById('btnDownload');
+const btnNewRec       = document.getElementById('btnNewRec');
 
-        function isFullscreenActive() {
-            return !!(
-                document.fullscreenElement ||
-                document.webkitFullscreenElement ||
-                window.navigator.standalone ||
-                window.matchMedia('(display-mode: fullscreen)').matches ||
-                window.matchMedia('(display-mode: standalone)').matches
-            );
-        }
+const liveVideo = Object.assign(document.createElement('video'), {
+    autoplay: true, muted: true, playsInline: true
+});
 
-        function syncFullscreenUi() {
-            document.body.classList.toggle('is-fullscreen', isFullscreenActive());
-        }
+// ── LOG ───────────────────────────────────────────────────────────────────────
+function log(msg) { sLog.textContent = msg; console.log('[booth]', msg); }
+function setStatus(msg) { statusText.textContent = msg; }
 
-        function setBoothStep(step) {
-            boothStep = step;
-            if (btnStartBooth) {
-                btnStartBooth.dataset.step = step;
-                btnStartBooth.textContent = step === 'camera' ? 'START CAMERA' : 'FULL SCREEN';
-            }
-            if (boothStepText) {
-                boothStepText.textContent = step === 'camera' ? '1/2 CAMERA ACTIVATION' : '2/2 FULLSCREEN';
-            }
-        }
+// ── CANVAS MÉRET + FIT ────────────────────────────────────────────────────────
+function fitPreview() {
+    canvas.width  = OUT_W;
+    canvas.height = OUT_H;
+    const s = Math.min(window.innerWidth / OUT_W, window.innerHeight / OUT_H);
+    canvas.style.width  = OUT_W * s + 'px';
+    canvas.style.height = OUT_H * s + 'px';
+}
 
-        async function requestFullscreenForElement(el) {
-            if (!el) return false;
-            if (el.requestFullscreen) {
-                try {
-                    await el.requestFullscreen({ navigationUI: 'hide' });
-                    return true;
-                } catch (_) {
-                    try {
-                        await el.requestFullscreen();
-                        return true;
-                    } catch (_) {}
-                }
-            }
-            if (el.webkitRequestFullscreen) {
-                try {
-                    el.webkitRequestFullscreen();
-                    return true;
-                } catch (_) {}
-            }
-            return false;
-        }
+// ── OVERLAY ───────────────────────────────────────────────────────────────────
+function loadOverlay(src, label) {
+    overlayReady = false;
+    overlayImg.onload  = () => { overlayReady = true;  log('Overlay: ' + label); };
+    overlayImg.onerror = () => { overlayReady = false; log('Overlay nem töltött: ' + label); };
+    overlayImg.src = src;
+}
 
-        async function requestFullscreenMode() {
-            const appEl = document.getElementById('app');
-            const targets = [appEl, document.documentElement].filter(Boolean);
-            if (isFullscreenActive()) {
-                syncFullscreenUi();
-                return true;
-            }
-            for (const el of targets) {
-                if (await requestFullscreenForElement(el)) {
-                    syncFullscreenUi();
-                    setTimeout(syncFullscreenUi, 250);
-                    return true;
-                }
-            }
-            syncFullscreenUi();
-            return false;
-        }
+// ── AUDIO ─────────────────────────────────────────────────────────────────────
+async function decodeAudio(ab, label) {
+    const tmp = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+        audioBuffer   = await tmp.decodeAudioData(ab);
+        audioFileName = label;
+        log('Zene: ' + label);
+    } catch(e) { log('Zene dekód hiba: ' + e.message); }
+    finally { tmp.close(); }
+}
 
-        function setCanvasSizeFromTrack(track) {
-            canvas.width = OUTPUT_WIDTH;
-            canvas.height = OUTPUT_HEIGHT;
-            applyPreviewFit();
-        }
+async function loadDefaultAudio() {
+    try {
+        const r = await fetch(DEFAULT_AUDIO + '?v=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        await decodeAudio(await r.arrayBuffer(), DEFAULT_AUDIO);
+    } catch(e) { log('Alapzene nem tölt: ' + e.message); }
+}
 
-        function applyPreviewFit() {
-            const wrap = document.getElementById('videoWrap');
-            const styles = wrap ? window.getComputedStyle(wrap) : null;
-            const padX = styles ? parseFloat(styles.paddingLeft || '0') + parseFloat(styles.paddingRight || '0') : 0;
-            const padY = styles ? parseFloat(styles.paddingTop || '0') + parseFloat(styles.paddingBottom || '0') : 0;
-            const vw = Math.max(1, ((wrap && wrap.clientWidth) || window.innerWidth || canvas.width) - padX);
-            const vh = Math.max(1, ((wrap && wrap.clientHeight) || window.innerHeight || canvas.height) - padY);
-            const ar = canvas.width / canvas.height;
-            const viewAr = vw / vh;
-            if (viewAr > ar) {
-                preview.style.height = `${vh}px`;
-                preview.style.width = 'auto';
-            } else {
-                preview.style.width = `${vw}px`;
-                preview.style.height = 'auto';
-            }
-            playback.style.width = preview.style.width;
-            playback.style.height = preview.style.height;
-        }
+// audio track a felvételhez (loop, dest)
+function buildAudioTrack() {
+    stopAudio();
+    if (!audioBuffer) return null;
+    recAudioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+    const dest      = recAudioCtx.createMediaStreamDestination();
+    const src       = recAudioCtx.createBufferSource();
+    src.buffer      = audioBuffer;
+    src.loop        = true;
+    src.connect(dest);
+    recAudioSrcs    = [src];
+    return dest.stream.getAudioTracks()[0] || null;
+}
+function startAudio() {
+    if (!recAudioCtx) return;
+    if (recAudioCtx.state === 'suspended') recAudioCtx.resume().catch(() => {});
+    recAudioSrcs.forEach(s => { try { s.start(0); } catch(_) {} });
+}
+function stopAudio() {
+    recAudioSrcs.forEach(s => { try { s.stop(); } catch(_) {} });
+    recAudioSrcs = [];
+    if (recAudioCtx) { try { recAudioCtx.close(); } catch(_) {} recAudioCtx = null; }
+}
 
-        function drawVideoCover(ctx2, videoEl, dstW, dstH) {
-            const vw = videoEl.videoWidth || dstW;
-            const vh = videoEl.videoHeight || dstH;
-            const scale = Math.min(dstW / vw, dstH / vh);
-            const dw = Math.round(vw * scale);
-            const dh = Math.round(vh * scale);
-            const dx = Math.round((dstW - dw) / 2);
-            const dy = Math.round((dstH - dh) / 2);
-            ctx2.fillStyle = '#000';
-            ctx2.fillRect(0, 0, dstW, dstH);
-            ctx2.drawImage(videoEl, 0, 0, vw, vh, dx, dy, dw, dh);
-        }
+// ── DRAW LOOP ─────────────────────────────────────────────────────────────────
+function drawFrame() {
+    if (!cameraStream || liveVideo.readyState < 2) return;
+    // cover: kitölti 720×1280-at, levágja ami kilóg
+    const vw = liveVideo.videoWidth  || OUT_W;
+    const vh = liveVideo.videoHeight || OUT_H;
+    const scale = Math.max(OUT_W / vw, OUT_H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx.drawImage(liveVideo, (OUT_W - dw) / 2, (OUT_H - dh) / 2, dw, dh);
+    if (overlayReady && overlayImg.naturalWidth) {
+        ctx.drawImage(overlayImg, 0, 0, OUT_W, OUT_H);
+    }
+}
+function startDraw() {
+    if (drawRafId) return;
+    const loop = () => { drawFrame(); drawRafId = requestAnimationFrame(loop); };
+    drawRafId = requestAnimationFrame(loop);
+}
+function stopDraw() { if (drawRafId) { cancelAnimationFrame(drawRafId); drawRafId = 0; } }
 
-        function drawOverlayToCanvas(ctx2, w, h) {
-            if (!overlayReady || !overlayImg.naturalWidth) return;
-            if (overlayCrop) {
-                ctx2.drawImage(
-                    overlayImg,
-                    overlayCrop.sx, overlayCrop.sy, overlayCrop.sw, overlayCrop.sh,
-                    0, 0, w, h
-                );
-            } else {
-                ctx2.drawImage(overlayImg, 0, 0, w, h);
-            }
-        }
-
-        function drawFrame() {
-            if (!cameraStream || liveVideo.readyState < 2) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawVideoCover(ctx, liveVideo, canvas.width, canvas.height);
-            drawOverlayToCanvas(ctx, canvas.width, canvas.height);
-        }
-
-        async function waitForStablePreviewFrames(count = 4) {
-            for (let i = 0; i < count; i++) {
-                await new Promise((resolve) => requestAnimationFrame(resolve));
-                drawFrame();
-            }
-        }
-
-        function startDrawLoop() {
-            stopDrawLoop();
-            const loop = (ts) => {
-                const frameMs = 1000 / Math.max(1, previewFps);
-                if (ts - lastDraw >= frameMs) {
-                    lastDraw = ts;
-                    drawFrame();
-                }
-                drawRaf = requestAnimationFrame(loop);
-            };
-            drawRaf = requestAnimationFrame(loop);
-        }
-
-        function stopDrawLoop() {
-            if (drawRaf) {
-                cancelAnimationFrame(drawRaf);
-                drawRaf = 0;
-            }
-        }
-
-        function setOverlaySource(src, label) {
-            overlayReady = false;
-            overlayCrop = null;
-            overlayImg.onload = () => {
-                overlayCrop = computeAlphaCrop(overlayImg);
-                overlayReady = true;
-                logMsg(`Overlay loaded: ${label}`);
-            };
-            overlayImg.onerror = () => {
-                overlayReady = false;
-                logMsg(`Overlay not loaded: ${label}`);
-            };
-            overlayImg.src = src;
-        }
-
-        async function loadDefaultOverlay() {
-            setOverlaySource(`${DEFAULT_OVERLAY_URL}?v=${Date.now()}`, DEFAULT_OVERLAY_URL);
-        }
-
-        overlayFile.addEventListener('change', () => {
-            const file = overlayFile.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => setOverlaySource(e.target.result, file.name || 'custom overlay');
-            reader.readAsDataURL(file);
-        });
-
-        async function decodeAudioArrayBuffer(arrayBuffer, label) {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            audioFileBuffer = await ctx.decodeAudioData(arrayBuffer);
-            audioFileName = label;
-            await ctx.close();
-            setAudioStatus(`Loaded: ${audioFileName}`);
-            logMsg(`Audio loaded: ${audioFileName}`);
-        }
-
-        async function loadDefaultAudio() {
-            audioFileBuffer = null;
-            audioFileName = '';
-            try {
-                const res = await fetch(`${DEFAULT_AUDIO_URL}?v=${Date.now()}`, { cache: 'no-store' });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.arrayBuffer();
-                await decodeAudioArrayBuffer(data, DEFAULT_AUDIO_URL);
-            } catch (e) {
-                console.warn('[AUDIO] default load failed:', e);
-                setAudioStatus(`Default audio missing: ${DEFAULT_AUDIO_URL}`);
-                logMsg(`Default audio not loaded: ${DEFAULT_AUDIO_URL}`);
-            }
-        }
-
-        if (audioMixFile) {
-            audioMixFile.addEventListener('change', async () => {
-                const file = audioMixFile.files[0];
-                audioFileBuffer = null;
-                audioFileName = '';
-                if (!file) return;
-                try {
-                    const data = await file.arrayBuffer();
-                    await decodeAudioArrayBuffer(data, file.name || 'audio');
-                } catch (e) {
-                    console.error(e);
-                    logMsg('Audio load failed.');
-                }
-            });
-        }
-
-        function computeAlphaCrop(img) {
-            const w = img.naturalWidth;
-            const h = img.naturalHeight;
-            const c = document.createElement('canvas');
-            c.width = w;
-            c.height = h;
-            const cctx = c.getContext('2d');
-            cctx.drawImage(img, 0, 0);
-            const data = cctx.getImageData(0, 0, w, h).data;
-            let minX = w, minY = h, maxX = -1, maxY = -1;
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const a = data[(y * w + x) * 4 + 3];
-                    if (a > 0) {
-                        if (x < minX) minX = x;
-                        if (y < minY) minY = y;
-                        if (x > maxX) maxX = x;
-                        if (y > maxY) maxY = y;
-                    }
-                }
-            }
-            if (maxX < minX || maxY < minY) return null;
-            return { sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1 };
-        }
-
-        async function detectWebCodecsSupport() {
-            const missing = [];
-            if (!('VideoEncoder' in window)) missing.push('VideoEncoder');
-            if (!('VideoFrame' in window)) missing.push('VideoFrame');
-            if (typeof Mp4Muxer === 'undefined') missing.push('mp4-muxer');
-
-            if (missing.length) {
-                useWebCodecs = false;
-                encoderStatus.textContent = 'WebCodecs required';
-                logMsg(`Missing: ${missing.join(', ')}`);
-                btnRecord.disabled = true;
-                if (browserWarning) {
-                    browserWarning.textContent = `Missing: ${missing.join(', ')}`;
-                    browserWarning.style.display = 'block';
-                }
-                return;
-            }
-            useWebCodecs = true;
-            const audioStatus = ('AudioEncoder' in window) ? '+ audio encoder' : 'video-only capable';
-            encoderStatus.textContent = `WebCodecs HW ready (${audioStatus})`;
-            if (browserWarning) browserWarning.style.display = 'none';
-        }
-
-        async function refreshDevices() {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
-            const selectedCam = activeCameraDeviceId || camSelect.value;
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const cams = devices.filter((d) => d.kind === 'videoinput');
-            camSelect.innerHTML = '';
-            cams.forEach((cam, idx) => {
-                const opt = document.createElement('option');
-                opt.value = cam.deviceId;
-                opt.textContent = cam.label || `Camera ${idx + 1}`;
-                camSelect.appendChild(opt);
-            });
-            if (selectedCam && [...camSelect.options].some((opt) => opt.value === selectedCam)) {
-                camSelect.value = selectedCam;
-            }
-        }
-
-        async function startCamera() {
-            stopCamera();
-            const camId = camSelect.value;
-            activeCameraDeviceId = camId || activeCameraDeviceId;
-            const videoConstraints = {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
+// ── KAMERA ────────────────────────────────────────────────────────────────────
+async function startCamera() {
+    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+    const camId = camSelect.value;
+    try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width:     { ideal: 1920 },
+                height:    { ideal: 1080 },
                 frameRate: { ideal: TARGET_FPS, min: 30 },
-                facingMode: 'user',
-                ...(camId ? { deviceId: { exact: camId } } : {})
-            };
-            const constraints = {
-                video: videoConstraints,
-                audio: false
-            };
-            try {
-                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (e) {
-                logMsg('Camera/mic permission failed.');
-                console.error(e);
-                return;
-            }
-
-            liveVideo.srcObject = cameraStream;
-            try {
-                await liveVideo.play();
-            } catch (_) {
-                logMsg('Video play blocked. Click once on the page and try again.');
-            }
-
-            const track = cameraStream.getVideoTracks()[0];
-            updateCameraCaps(track);
-            populateResolutionOptions(track);
-            await applyResolutionSelection(track, true);
-            const settings = track && track.getSettings ? track.getSettings() : {};
-            if (statusFps) statusFps.textContent = String(Math.round(settings.frameRate || 30));
-            if (statusAspect && settings.width && settings.height) {
-                statusAspect.textContent = `${settings.width}:${settings.height}`;
-            }
-            startDrawLoop();
-            btnRecord.disabled = !useWebCodecs;
-            logMsg('Camera ready.');
-            await refreshDevices();
-        }
-
-        function stopCamera() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach((t) => t.stop());
-                cameraStream = null;
-            }
-        }
-
-        function cleanupRecordingStream() {
-            if (activeCanvasStream) {
-                activeCanvasStream.getTracks().forEach((t) => t.stop());
-                activeCanvasStream = null;
-            }
-        }
-
-        function handleRecordingComplete(blob, ext) {
-            cleanupRecordingStream();
-            if (currentBlobUrl) {
-                URL.revokeObjectURL(currentBlobUrl);
-            }
-            currentBlobUrl = URL.createObjectURL(blob);
-            playback.src = currentBlobUrl;
-            playback.style.display = 'block';
-            preview.style.display = 'none';
-            if (outputActions) outputActions.style.display = 'grid';
-            logMsg(`Saved (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
-            recBytes = 0;
-        }
-
-        function pickMediaRecorderMime() {
-            const candidates = [
-                'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-                'video/mp4;codecs=avc1.42E01E',
-                'video/mp4',
-                'video/webm;codecs=vp8,opus',
-                'video/webm;codecs=vp9,opus',
-                'video/webm'
-            ];
-            if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return { mime: 'video/mp4', ext: 'mp4' };
-            for (const mime of candidates) {
-                try { if (MediaRecorder.isTypeSupported(mime)) return { mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' }; } catch (_) {}
-            }
-            return { mime: 'video/mp4', ext: 'mp4' };
-        }
-
-        async function startRecordingMediaRecorder(fps, bitrate) {
-            // Canvas stream + audio track együtt → MediaRecorder (iPad Safari fallback)
-            const musicTrack = audioFileBuffer ? buildMixedAudioTrack(null, audioFileBuffer) : null;
-            const canvasStream = canvas.captureStream(fps);
-            if (musicTrack) canvasStream.addTrack(musicTrack);
-            activeCanvasStream = canvasStream;
-
-            const { mime, ext } = pickMediaRecorderMime();
-            let mr;
-            try {
-                mr = new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: bitrate });
-            } catch (_) {
-                mr = new MediaRecorder(canvasStream);
-            }
-            mediaRecorderChunks = [];
-            mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) mediaRecorderChunks.push(e.data); };
-            mr.onstop = () => {
-                const blob = new Blob(mediaRecorderChunks, { type: mime });
-                handleRecordingComplete(blob, ext);
-                mediaRecorderChunks = [];
-            };
-            mr.start(500);
-            mediaRecorderFallback = mr;
-            startAudioMixPlayback();
-            encoderStatus.textContent = `MediaRecorder ${mime} ${canvas.width}x${canvas.height}@${fps}`;
-            setAudioStatus(musicTrack ? 'Music → MediaRecorder stream' : 'No music');
-            logMsg('Recording (MediaRecorder)...');
-        }
-
-        async function startRecording() {
-            if (!cameraStream) {
-                logMsg('Start the camera first.');
-                return;
-            }
-            clearOutput();
-            const track = cameraStream.getVideoTracks()[0];
-            const settings = track && track.getSettings ? track.getSettings() : {};
-            setCanvasSizeFromTrack(track);
-            const fps = settings.frameRate || 30;
-            const bitrateValue = bitrateInput ? parseFloat(bitrateInput.value) : 0;
-            const bitrate = (bitrateValue && bitrateValue > 0)
-                ? Math.round(bitrateValue * 1_000_000)
-                : Math.max(8_000_000, Math.round(canvas.width * canvas.height * fps * 0.07));
-            if (statusFps) statusFps.textContent = String(Math.round(fps));
-            if (statusBitrate) statusBitrate.textContent = `${(bitrate / 1_000_000).toFixed(1)} Mbps`;
-            await waitForStablePreviewFrames(4);
-
-            isRecording = true;
-            recBytes = 0;
-            recStartMs = performance.now();
-
-            // Ha nincs AudioEncoder (iPad Safari), MediaRecorder fallback-kel rögzítünk
-            // mert az egyetlen mód, ahol a hang is belekerül a fájlba
-            const hasAudioEncoder = ('AudioEncoder' in window) && (typeof MediaStreamTrackProcessor !== 'undefined');
-            if (!useWebCodecs || !hasAudioEncoder) {
-                if (!useWebCodecs) {
-                    logMsg('WebCodecs N/A – MediaRecorder fallback');
-                } else {
-                    logMsg('No AudioEncoder – MediaRecorder fallback (hang is lesz)');
-                }
-                await startRecordingMediaRecorder(fps, bitrate);
-                btnRecord.textContent = 'Stop recording';
-                if (recStatsTimer) clearInterval(recStatsTimer);
-                recStatsTimer = setInterval(() => {
-                    const elapsed = Math.max(0.001, (performance.now() - recStartMs) / 1000);
-                    if (statusBitrate) statusBitrate.textContent = `${elapsed.toFixed(0)}s`;
-                }, 500);
-                return;
-            }
-
-            setAudioStatus(audioFileBuffer ? `Music ready: ${audioFileName || 'loaded'}` : 'No music loaded');
-            const musicTrack = audioFileBuffer ? buildMixedAudioTrack(null, audioFileBuffer) : null;
-            recorder = new WebCodecsRecorder(track, musicTrack, {
-                width: canvas.width,
-                height: canvas.height,
-                framerate: fps,
-                videoBitsPerSecond: bitrate,
-                sourceCanvas: canvas
-            });
-            try {
-                await recorder.start();
-                startAudioMixPlayback();
-                if (recorder.chosenConfig) {
-                    encoderStatus.textContent = `WebCodecs ${recorder.chosenConfig.codec || 'avc1'} ${canvas.width}x${canvas.height}@${fps}`;
-                } else {
-                    encoderStatus.textContent = 'WebCodecs running';
-                }
-            } catch (e) {
-                console.error(e);
-                logMsg('WebCodecs failed – MediaRecorder fallback');
-                recorder = null;
-                await startRecordingMediaRecorder(fps, bitrate);
-                btnRecord.textContent = 'Stop recording';
-                return;
-            }
-
-            if (recStatsTimer) clearInterval(recStatsTimer);
-            recStatsTimer = setInterval(() => {
-                const elapsed = Math.max(0.001, (performance.now() - recStartMs) / 1000);
-                const avgMbps = (recBytes * 8) / (elapsed * 1_000_000);
-                if (statusBitrate) statusBitrate.textContent = `${avgMbps.toFixed(1)} Mbps`;
-            }, 500);
-            btnRecord.textContent = 'Stop recording';
-            logMsg('Recording...');
-        }
-
-        async function stopRecording() {
-            if (!isRecording) return;
-            isRecording = false;
-            btnRecord.textContent = 'Start recording';
-
-            if (mediaRecorderFallback) {
-                try {
-                    mediaRecorderFallback.stop();
-                } catch (_) {}
-                mediaRecorderFallback = null;
-                cleanupRecordingStream();
-                stopAudioMix();
-            } else if (recorder) {
-                try {
-                    logMsg('Stopping...');
-                    const blob = await recorder.stop();
-                    handleRecordingComplete(blob, 'mp4');
-                } catch (e) {
-                    console.error(e);
-                    logMsg(`Stop failed: ${e && e.message ? e.message : 'unknown error'}`);
-                }
-                recorder = null;
-                stopAudioMix();
-            }
-
-            if (recStatsTimer) {
-                clearInterval(recStatsTimer);
-                recStatsTimer = 0;
-            }
-        }
-
-        btnStartCam.addEventListener('click', async () => {
-            await requestFullscreenMode();
-            await startCamera();
+                ...(camId ? { deviceId: { exact: camId } } : { facingMode: 'user' })
+            },
+            audio: false
         });
-        let boothStartInProgress = false;
-        async function startBoothFromGesture(event) {
-            if (event) event.preventDefault();
-            if (boothStartInProgress) return;
-            boothStartInProgress = true;
+    } catch(e) { log('Kamera hiba: ' + e.message); return false; }
+
+    liveVideo.srcObject = cameraStream;
+    try { await liveVideo.play(); } catch(_) {}
+
+    // próbáljuk 60fps-re csavarni
+    const track = cameraStream.getVideoTracks()[0];
+    if (track?.applyConstraints) {
+        try { await track.applyConstraints({ frameRate: { ideal: TARGET_FPS } }); } catch(_) {}
+    }
+    const s = track?.getSettings?.() || {};
+    log(`Kamera: ${s.width}×${s.height} @ ${Math.round(s.frameRate||30)}fps`);
+    fitPreview();
+    startDraw();
+    btnRecord.disabled = false;
+    return true;
+}
+
+async function refreshCams() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const prev = camSelect.value;
+    camSelect.innerHTML = '';
+    devs.filter(d => d.kind === 'videoinput').forEach((d, i) => {
+        const o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || `Kamera ${i+1}`;
+        camSelect.appendChild(o);
+    });
+    if (prev && [...camSelect.options].some(o => o.value === prev)) camSelect.value = prev;
+}
+
+// ── WEBCODECS DETEKTÁLÁS ──────────────────────────────────────────────────────
+async function detectHW() {
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window) || typeof Mp4Muxer === 'undefined') {
+        useHW = false; return;
+    }
+    // Teszteljük hogy tényleg megy-e a HW encoder
+    const cfg = {
+        codec: 'avc1.64002A', width: OUT_W, height: OUT_H,
+        framerate: TARGET_FPS, bitrate: 12_000_000,
+        hardwareAcceleration: 'prefer-hardware'
+    };
+    try {
+        const r = await VideoEncoder.isConfigSupported(cfg);
+        useHW = !!(r?.supported);
+    } catch(_) { useHW = false; }
+
+    if (useHW) {
+        encBadge.textContent = 'HW H.264';
+        encBadge.className   = 'hw';
+    } else {
+        encBadge.textContent = 'SW MediaRec';
+        encBadge.className   = 'mr';
+    }
+}
+
+// ── HW FELVÉTEL (WebCodecs + mp4-muxer) ──────────────────────────────────────
+async function pickVideoConfig() {
+    const profiles = [
+        // High profile – legjobb minőség, iPad A13 simán bírja
+        'avc1.64002A', 'avc1.640029', 'avc1.64001F',
+        // Main profile fallback
+        'avc1.4D402A', 'avc1.4D4029',
+        // Baseline végső fallback
+        'avc1.42E02A', 'avc1.42E01E'
+    ];
+    const base = {
+        width: OUT_W, height: OUT_H,
+        framerate: TARGET_FPS, bitrate: 12_000_000,
+        bitrateMode: 'variable', latencyMode: 'quality'
+    };
+    for (const accel of ['prefer-hardware', 'no-preference']) {
+        for (const codec of profiles) {
+            const cfg = { ...base, codec, hardwareAcceleration: accel };
             try {
-                if (boothStep === 'camera') {
-                    if (startOverlay) startOverlay.classList.add('hidden');
-                    await startCamera();
-                    await requestFullscreenMode();
-                    return;
+                const r = await VideoEncoder.isConfigSupported(cfg);
+                if (r?.supported) return r.config || cfg;
+            } catch(_) {}
+        }
+    }
+    throw new Error('Nincs támogatott H.264 konfig');
+}
+
+async function startHW(audioTrack) {
+    const cfg = await pickVideoConfig();
+
+    // audio info a muxerhez – csak ha van AudioEncoder (Chrome)
+    const hasAudioEnc = ('AudioEncoder' in window) && (typeof MediaStreamTrackProcessor !== 'undefined');
+    const audioInfo = (hasAudioEnc && audioTrack) ? {
+        codec: 'aac',
+        numberOfChannels: audioTrack.getSettings().channelCount || 2,
+        sampleRate: audioTrack.getSettings().sampleRate || 48000
+    } : null;
+
+    const muxer = new Mp4Muxer.Muxer({
+        target: new Mp4Muxer.ArrayBufferTarget(),
+        video: { codec: 'avc', width: OUT_W, height: OUT_H },
+        ...(audioInfo ? { audio: audioInfo } : {}),
+        fastStart: 'in-memory'
+    });
+
+    let frameCount = 0;
+    const keyInterval = Math.round(TARGET_FPS * 2);
+
+    const encoder = new VideoEncoder({
+        output: (chunk, meta) => {
+            try {
+                let m = meta;
+                if (m?.decoderConfig?.colorSpace == null && m?.decoderConfig) {
+                    m = { ...m, decoderConfig: { ...m.decoderConfig } };
+                    delete m.decoderConfig.colorSpace;
                 }
-                // fullscreen step (shouldn't normally be reached via overlay btn)
-                await requestFullscreenMode();
-            } finally {
-                boothStartInProgress = false;
-            }
-        }
-        if (btnStartBooth) {
-            btnStartBooth.addEventListener('click', startBoothFromGesture);
-        }
-        btnRecord.addEventListener('click', async () => {
-            await requestFullscreenMode();
-            if (isRecording) await stopRecording();
-            else await startRecording();
+                muxer.addVideoChunk(chunk, m);
+                recBytes += chunk.byteLength || 0;
+            } catch(e) { console.warn('[HW] muxer video err:', e); }
+        },
+        error: e => console.error('[HW] encode err:', e)
+    });
+    encoder.configure(cfg);
+
+    // Audio encoder – csak Chromeon
+    let audioEncoder = null;
+    let audioReader  = null;
+    if (audioInfo && hasAudioEnc && audioTrack) {
+        const audioCfg = {
+            codec: 'mp4a.40.2',
+            sampleRate: audioInfo.sampleRate,
+            numberOfChannels: audioInfo.numberOfChannels,
+            bitrate: 128_000
+        };
+        const sup = await AudioEncoder.isConfigSupported(audioCfg);
+        audioEncoder = new AudioEncoder({
+            output: (chunk, meta) => { muxer.addAudioChunk(chunk, meta); },
+            error: e => console.error('[HW] audio enc err:', e)
         });
-        document.addEventListener('fullscreenchange', syncFullscreenUi);
-        document.addEventListener('webkitfullscreenchange', syncFullscreenUi);
-        window.addEventListener('resize', syncFullscreenUi);
-        syncFullscreenUi();
-        setBoothStep('camera');
+        audioEncoder.configure(sup?.config || audioCfg);
 
-        window.addEventListener('beforeunload', () => {
-            stopCamera();
-            stopDrawLoop();
-        });
-
-        function clearOutput() {
-            if (currentBlobUrl) {
-                URL.revokeObjectURL(currentBlobUrl);
-                currentBlobUrl = null;
+        const proc = new MediaStreamTrackProcessor({ track: audioTrack });
+        audioReader = proc.readable.getReader();
+        (async () => {
+            while (true) {
+                const { done, value } = await audioReader.read();
+                if (done || !hwRecorder) break;
+                if (audioEncoder.state === 'configured') {
+                    audioEncoder.encode(value);
+                    value.close();
+                } else { value.close(); break; }
             }
-            playback.removeAttribute('src');
-            playback.style.display = 'none';
-            preview.style.display = 'block';
-            if (outputActions) outputActions.style.display = 'none';
-        }
+        })();
+    }
 
-        function buildMixedAudioTrack(micTrack, fileBuffer) {
-            stopAudioMix();
-            recordAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const dest = recordAudioCtx.createMediaStreamDestination();
-            recordAudioSources = [];
-            mixGainMic = recordAudioCtx.createGain();
-            mixGainFile = recordAudioCtx.createGain();
-            monitorGainFile = recordAudioCtx.createGain();
-            monitorGainFile.gain.value = fileBuffer ? 1 : 0;
-            updateMixGains();
-            if (micTrack) {
-                const micStream = new MediaStream([micTrack]);
-                const micSource = recordAudioCtx.createMediaStreamSource(micStream);
-                micSource.connect(mixGainMic);
-                mixGainMic.connect(dest);
-                recordAudioSources.push(micSource);
-            }
-            if (fileBuffer) {
-                const fileSource = recordAudioCtx.createBufferSource();
-                fileSource.buffer = fileBuffer;
-                fileSource.loop = true;
-                fileSource.connect(mixGainFile);
-                fileSource.connect(monitorGainFile);
-                mixGainFile.connect(dest);
-                monitorGainFile.connect(recordAudioCtx.destination);
-                recordAudioSources.push(fileSource);
-            }
-            return dest.stream.getAudioTracks()[0] || null;
-        }
-
-        function startAudioMixPlayback() {
-            if (!recordAudioCtx) return;
-            if (recordAudioCtx.state === 'suspended') {
-                recordAudioCtx.resume().catch(() => {});
-            }
-            recordAudioSources.forEach((src) => {
-                if (src && typeof src.start === 'function') {
-                    try { src.start(0); } catch (_) {}
-                }
-            });
-        }
-
-        function stopAudioMix() {
-            recordAudioSources.forEach((src) => {
-                try { if (src && typeof src.stop === 'function') src.stop(0); } catch (_) {}
-            });
-            recordAudioSources = [];
-            mixGainMic = null;
-            mixGainFile = null;
-            monitorGainFile = null;
-            if (recordAudioCtx) {
-                try { recordAudioCtx.close(); } catch (_) {}
-                recordAudioCtx = null;
-            }
-        }
-
-        function updateMixGains() {
-            if (mixGainMic) mixGainMic.gain.value = 0;
-            if (mixGainFile) mixGainFile.gain.value = 1;
-            if (monitorGainFile) monitorGainFile.gain.value = 1;
-        }
-
-        function getMusicVolume() {
-            return 1;
-        }
-
-        if (btnOpenOutput) {
-            btnOpenOutput.addEventListener('click', () => {
-                if (!currentBlobUrl) return;
-                window.open(currentBlobUrl, '_blank');
-            });
-        }
-        if (btnDownloadOutput) {
-            btnDownloadOutput.addEventListener('click', () => {
-                if (!currentBlobUrl) return;
-                const now = new Date();
-                const name = `360_hw_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.mp4`;
-                const a = document.createElement('a');
-                a.href = currentBlobUrl;
-                a.download = name;
-                a.click();
-            });
-        }
-        if (btnClearOutput) {
-            btnClearOutput.addEventListener('click', clearOutput);
-        }
-
-        function toggleMenu(open) {
-            if (!menuDrawer) return;
-            const shouldOpen = (typeof open === 'boolean') ? open : !menuDrawer.classList.contains('open');
-            menuDrawer.classList.toggle('open', shouldOpen);
-            if (menuBackdrop) menuBackdrop.classList.toggle('open', shouldOpen);
-            if (menuBtn) menuBtn.style.display = shouldOpen ? 'none' : '';
-        }
-        if (menuBtn) menuBtn.addEventListener('click', () => toggleMenu());
-        if (menuBackdrop) menuBackdrop.addEventListener('click', () => toggleMenu(false));
-        if (menuClose) menuClose.addEventListener('click', () => toggleMenu(false));
-        window.addEventListener('resize', applyPreviewFit);
-
-        function updateCameraCaps(track) {
-            if (!camCaps || !track || !track.getCapabilities) return;
-            const caps = track.getCapabilities();
-            const w = caps.width ? `${caps.width.min || '?'}–${caps.width.max || '?'}` : '?';
-            const h = caps.height ? `${caps.height.min || '?'}–${caps.height.max || '?'}` : '?';
-            const fps = caps.frameRate ? `${caps.frameRate.min || '?'}–${caps.frameRate.max || '?'}` : '?';
-            camCaps.textContent = `W ${w} • H ${h} • FPS ${fps}`;
-        }
-
-        function populateResolutionOptions(track) {
-            if (!resolution) return;
-            resolution.innerHTML = '';
-            const presets = [
-                ['booth', 'Booth source auto (1280x720 @ max FPS)'],
-                ['fhd', 'FHD source (1920x1080)'],
-                ['hd', 'HD source (1280x720)'],
-                ['square', 'Square source (1440x1440 fallback)']
-            ];
-            presets.forEach(([value, label]) => {
-                const opt = document.createElement('option');
-                opt.value = value;
-                opt.textContent = label;
-                resolution.appendChild(opt);
-            });
-            resolution.value = 'booth';
-        }
-
-        async function applyResolutionSelection(track, useMaxByDefault) {
-            if (!track || !track.applyConstraints) return;
-            const caps = track.getCapabilities ? track.getCapabilities() : {};
-            const maxFps = caps.frameRate && caps.frameRate.max ? caps.frameRate.max : null;
-            const selected = (useMaxByDefault || !resolution) ? 'booth' : resolution.value;
-            const wantedFps = Math.min(maxFps || TARGET_FPS, TARGET_FPS);
-            const profiles = {
-                booth: [
-                    { width: 1280, height: 720, frameRate: wantedFps },
-                    { width: 1920, height: 1080, frameRate: wantedFps },
-                    { width: 1440, height: 1440, frameRate: wantedFps },
-                    { frameRate: wantedFps }
-                ],
-                fhd: [{ width: 1920, height: 1080, frameRate: wantedFps }],
-                hd: [{ width: 1280, height: 720, frameRate: wantedFps }],
-                square: [{ width: 1440, height: 1440, frameRate: wantedFps }]
-            };
-            const attempts = profiles[selected] || profiles.booth;
-            for (const wanted of attempts) {
-                try {
-                    const constraints = {};
-                    if (wanted.width) constraints.width = { ideal: wanted.width };
-                    if (wanted.height) constraints.height = { ideal: wanted.height };
-                    if (wanted.frameRate) constraints.frameRate = { ideal: wanted.frameRate };
-                    await track.applyConstraints(constraints);
-                    break;
-                } catch (e) {
-                    console.warn('[CAM] applyConstraints failed:', wanted, e);
-                }
-            }
-            const settings = track.getSettings ? track.getSettings() : {};
-            actualRes.textContent = `${settings.width || '?'}x${settings.height || '?'} → ${OUTPUT_WIDTH}x${OUTPUT_HEIGHT}`;
-            if (statusAspect && settings.width && settings.height) {
-                statusAspect.textContent = `${settings.width}:${settings.height}`;
-            }
-            setCanvasSizeFromTrack(track);
-            previewFps = settings.frameRate || 30;
-            if (statusFps) statusFps.textContent = String(Math.round(previewFps));
-        }
-
-        class WebCodecsRecorder {
-            constructor(videoTrack, audioTrack, options = {}) {
-                this.videoTrack = videoTrack;
-                this.audioTrack = audioTrack;
-                this.options = options;
-                this.encoder = null;
-                this.audioEncoder = null;
-                this.muxer = null;
-                this.reader = null;
-                this.audioReader = null;
-                this.frameCounter = 0;
-                this.keyFrameIntervalFrames = 0;
-                this.isRecording = false;
-                this.sourceCanvas = options.sourceCanvas || null;
-                this.chosenConfig = null;
-                this.videoBaseTs = null;
-                this.audioBaseTs = null;
-                this.startedAtMs = 0;
-                this.framerate = options.framerate || 30;
-                this.audioChunkCount = 0;
-                this.fileAudioChunkCount = 0;
-            }
-
-            async start() {
-                const settings = this.videoTrack && this.videoTrack.getSettings ? this.videoTrack.getSettings() : {};
-                const width = this.options.width || settings.width || 1280;
-                const height = this.options.height || settings.height || 720;
-                const framerate = this.options.framerate || settings.frameRate || 30;
-                const bitrate = this.options.videoBitsPerSecond || 12000000;
-                this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
-                this.frameCounter = 0;
-                this.isRecording = true;
-                this.startedAtMs = performance.now();
-                this.framerate = framerate;
-
-                const audioInfo = this.getAudioInfo();
-                this.muxer = new Mp4Muxer.Muxer({
-                    target: new Mp4Muxer.ArrayBufferTarget(),
-                    video: { codec: 'avc', width, height },
-                    ...(audioInfo ? { audio: audioInfo } : {}),
-                    fastStart: 'in-memory'
+    // Canvas frame capture loop
+    const frameMs = 1000 / TARGET_FPS;
+    let lastFrameTs = 0;
+    const rafLoop = (ts) => {
+        if (!hwRecorder) return;
+        if (ts - lastFrameTs >= frameMs) {
+            lastFrameTs = ts;
+            try {
+                const frame = new VideoFrame(canvas, {
+                    timestamp: frameCount * (1_000_000 / TARGET_FPS),
+                    duration:  1_000_000 / TARGET_FPS
                 });
-
-                this.chosenConfig = await this.pickVideoConfig(width, height, framerate, bitrate);
-                this.encoder = new VideoEncoder({
-                    output: (chunk, metadata) => {
-                        try {
-                            let muxMeta;
-                            if (metadata && metadata.decoderConfig && metadata.decoderConfig.description) {
-                                muxMeta = { ...metadata, decoderConfig: { ...metadata.decoderConfig } };
-                                if (muxMeta.decoderConfig.colorSpace == null) {
-                                    delete muxMeta.decoderConfig.colorSpace;
-                                }
-                            }
-                            this.muxer.addVideoChunk(chunk, muxMeta);
-                            recBytes += chunk.byteLength || 0;
-                        } catch (e) {
-                            console.warn('[WebCodecs] muxer addVideoChunk failed:', e);
-                        }
-                    },
-                    error: (e) => console.error('[WebCodecs] Video encode error:', e)
-                });
-                this.encoder.configure(this.chosenConfig);
-
-                await this.startAudioEncoding(audioInfo);
-
-                if (this.sourceCanvas) {
-                    this.captureFramesWithCanvas(width, height, framerate);
-                } else if (this.videoTrack && typeof MediaStreamTrackProcessor !== 'undefined') {
-                    const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
-                    this.reader = processor.readable.getReader();
-                    this.processFrames();
+                if (encoder.state === 'configured') {
+                    encoder.encode(frame, { keyFrame: frameCount % keyInterval === 0 });
+                    frameCount++;
                 }
-            }
-
-            getAudioInfo() {
-                if (!this.audioTrack || !('AudioEncoder' in window) || typeof MediaStreamTrackProcessor === 'undefined') return null;
-                const settings = this.audioTrack.getSettings();
-                return {
-                    codec: 'aac',
-                    numberOfChannels: settings.channelCount || 2,
-                    sampleRate: settings.sampleRate || 48000
-                };
-            }
-
-            async startAudioEncoding(audioInfo) {
-                if (!audioInfo) return;
-                if (typeof MediaStreamTrackProcessor === 'undefined') return;
-                const bitrate = this.options.audioBitsPerSecond || 128000;
-                const config = {
-                    codec: 'mp4a.40.2',
-                    sampleRate: audioInfo.sampleRate,
-                    numberOfChannels: audioInfo.numberOfChannels,
-                    bitrate
-                };
-                const supported = await AudioEncoder.isConfigSupported(config);
-                const finalConfig = supported && supported.supported ? (supported.config || config) : config;
-                this.audioEncoder = new AudioEncoder({
-                    output: (chunk, metadata) => {
-                        this.muxer.addAudioChunk(chunk, metadata);
-                        this.audioChunkCount++;
-                        recBytes += chunk.byteLength || 0;
-                    },
-                    error: (e) => console.error('[WebCodecs] Audio encode error:', e)
-                });
-                this.audioEncoder.configure(finalConfig);
-                const processor = new MediaStreamTrackProcessor({ track: this.audioTrack });
-                this.audioReader = processor.readable.getReader();
-                setAudioStatus('Music track encoder running');
-                this.processAudio();
-            }
-
-            async pickVideoConfig(width, height, framerate, bitrate) {
-                const selectMode = (codecSelect && codecSelect.value) ? codecSelect.value : 'auto';
-                const h264High = (width * height >= 3840 * 2160)
-                    ? ['avc1.640033', 'avc1.640032', 'avc1.64002A', 'avc1.640029']
-                    : ['avc1.64002A', 'avc1.640029'];
-                const h264Main = ['avc1.4D402A', 'avc1.4D4029'];
-                const h264Base = ['avc1.42E02A', 'avc1.42E01F', 'avc1.42E01E', 'avc1.42001E'];
-                const hevc = ['hvc1.1.6.L123.B0', 'hvc1.1.6.L120.B0', 'hvc1.1.6.L93.B0'];
-
-                let baseCandidates = [];
-                if (selectMode === 'h264-high') baseCandidates = [...h264High, ...h264Main, ...h264Base];
-                else if (selectMode === 'h264-main') baseCandidates = [...h264Main, ...h264High, ...h264Base];
-                else if (selectMode === 'h264-base') baseCandidates = [...h264Base, ...h264Main, ...h264High];
-                else if (selectMode === 'hevc') baseCandidates = [...hevc, ...h264High, ...h264Main, ...h264Base];
-                else baseCandidates = [...h264High, ...h264Main, ...h264Base];
-                const baseConfig = { width, height, bitrate, framerate };
-                const configVariants = [
-                    { ...baseConfig, bitrateMode: 'variable', latencyMode: 'quality' },
-                    { ...baseConfig, latencyMode: 'quality' },
-                    { ...baseConfig, bitrateMode: 'variable' },
-                    { ...baseConfig }
-                ];
-                const accelVariants = ['prefer-hardware', 'no-preference'];
-                for (const accel of accelVariants) {
-                    for (const codec of baseCandidates) {
-                        for (const variant of configVariants) {
-                            const cfg = { ...variant, codec, hardwareAcceleration: accel };
-                            const support = await VideoEncoder.isConfigSupported(cfg);
-                            if (support && support.supported) {
-                                return support.config || cfg;
-                            }
-                        }
-                    }
-                }
-                throw new Error('No supported H.264 encoder config for this resolution.');
-            }
-
-            async processFrames() {
-                try {
-                    while (this.isRecording) {
-                        const { done, value: frame } = await this.reader.read();
-                        if (done) break;
-                        if (frame && this.encoder.state === 'configured') {
-                            if (this.videoBaseTs === null) this.videoBaseTs = frame.timestamp || 0;
-                            const adjTs = Math.max(0, (frame.timestamp || 0) - this.videoBaseTs);
-                            const adjFrame = new VideoFrame(frame, {
-                                timestamp: adjTs,
-                                duration: frame.duration
-                            });
-                            const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
-                            this.encoder.encode(adjFrame, { keyFrame });
-                            this.frameCounter++;
-                            adjFrame.close();
-                        }
-                        frame && frame.close();
-                    }
-                } catch (e) {
-                    console.error('[WebCodecs] Frame processing error:', e);
-                }
-            }
-
-            async processAudio() {
-                if (!this.audioReader || !this.audioEncoder) return;
-                try {
-                    while (this.isRecording) {
-                        const { done, value: audioData } = await this.audioReader.read();
-                        if (done) break;
-                        if (audioData && this.audioEncoder.state === 'configured') {
-                            if (this.audioBaseTs === null) this.audioBaseTs = audioData.timestamp || 0;
-                            const adjTs = Math.max(0, (audioData.timestamp || 0) - this.audioBaseTs);
-                            const { format, data } = buildInterleavedAudioData(audioData);
-                            const numberOfChannels = audioData.numberOfChannels;
-                            const numberOfFrames = audioData.numberOfFrames;
-                            const sampleRate = audioData.sampleRate;
-                            const adjAudio = new AudioData({
-                                format,
-                                sampleRate,
-                                numberOfFrames,
-                                numberOfChannels,
-                                timestamp: adjTs,
-                                data
-                            });
-                            this.audioEncoder.encode(adjAudio);
-                            adjAudio.close();
-                        }
-                        audioData && audioData.close();
-                    }
-                } catch (e) {
-                    console.error('[WebCodecs] Audio processing error:', e);
-                }
-            }
-
-            captureFramesWithCanvas(width, height, framerate) {
-                const canvasRef = this.sourceCanvas;
-                if (!canvasRef) {
-                    throw new Error('Canvas source missing for fallback capture.');
-                }
-                const frameInterval = 1000 / framerate;
-                let lastFrameTime = 0;
-                const captureFrame = (timestamp) => {
-                    if (!this.isRecording) return;
-                    const elapsed = timestamp - lastFrameTime;
-                    if (elapsed >= frameInterval) {
-                        lastFrameTime = timestamp;
-                        try {
-                            const frame = new VideoFrame(canvasRef, {
-                                timestamp: this.frameCounter * (1_000_000 / framerate),
-                                duration: 1_000_000 / framerate
-                            });
-                            if (this.encoder.state === 'configured') {
-                                const keyFrame = this.frameCounter % this.keyFrameIntervalFrames === 0;
-                                this.encoder.encode(frame, { keyFrame });
-                                this.frameCounter++;
-                            }
-                            frame.close();
-                        } catch (e) {
-                            console.error('[WebCodecs] Frame capture error:', e);
-                        }
-                    }
-                    requestAnimationFrame(captureFrame);
-                };
-                requestAnimationFrame(captureFrame);
-            }
-
-            async stop() {
-                this.isRecording = false;
-                if (this.reader) {
-                    try {
-                        await this.reader.cancel();
-                    } catch (_) {
-                    }
-                    this.reader = null;
-                }
-                if (this.audioReader) {
-                    try {
-                        await this.audioReader.cancel();
-                    } catch (_) {
-                    }
-                    this.audioReader = null;
-                }
-                if (this.encoder && this.encoder.state === 'configured') {
-                    try {
-                        await this.encoder.flush();
-                        this.encoder.close();
-                    } catch (e) {
-                        console.warn('[WebCodecs] Video flush/close error:', e);
-                    }
-                }
-                if (this.audioEncoder && this.audioEncoder.state === 'configured') {
-                    try {
-                        await this.audioEncoder.flush();
-                        this.audioEncoder.close();
-                        setAudioStatus(this.audioChunkCount > 0 ? `Music track muxed: ${this.audioChunkCount} AAC chunks` : 'Music track produced 0 chunks');
-                    } catch (e) {
-                        console.warn('[WebCodecs] Audio flush/close error:', e);
-                        setAudioStatus(`Music track mux failed: ${e && e.message ? e.message : 'error'}`);
-                    }
-                }
-                if (this.muxer) {
-                    this.muxer.finalize();
-                    const { buffer } = this.muxer.target;
-                    return new Blob([buffer], { type: 'video/mp4' });
-                }
-                return new Blob([], { type: 'video/mp4' });
-            }
+                frame.close();
+            } catch(e) { console.warn('[HW] frame err:', e); }
         }
+        hwRecorder.rafId = requestAnimationFrame(rafLoop);
+    };
 
-        if (resolution) {
-            resolution.addEventListener('change', async () => {
-                const track = cameraStream && cameraStream.getVideoTracks ? cameraStream.getVideoTracks()[0] : null;
-                if (track) await applyResolutionSelection(track, false);
-            });
-        }
-        async function initBooth() {
-            await detectWebCodecsSupport();
-            await Promise.allSettled([
-                loadDefaultOverlay(),
-                loadDefaultAudio(),
-                refreshDevices()
-            ]);
-        }
-        initBooth();
+    hwRecorder = { encoder, audioEncoder, audioReader, muxer, rafId: 0 };
+    hwRecorder.rafId = requestAnimationFrame(rafLoop);
+    encBadge.textContent = `HW H.264 ${cfg.codec}`;
+    encBadge.className   = 'hw';
+    log('HW felvétel: ' + cfg.codec);
+}
 
-        function buildInterleavedAudioData(audioData) {
-            const format = audioData.format;
-            const channels = audioData.numberOfChannels;
-            const frames = audioData.numberOfFrames;
-            const baseFormat = format.includes('planar') ? format.replace('-planar', '') : format;
-            const isF32 = baseFormat === 'f32';
-            const isS16 = baseFormat === 's16';
-            const TypedArray = isF32 ? Float32Array : (isS16 ? Int16Array : Uint8Array);
-            const out = new TypedArray(frames * channels);
+async function stopHW() {
+    if (!hwRecorder) return null;
+    const { encoder, audioEncoder, audioReader, muxer, rafId } = hwRecorder;
+    hwRecorder = null;
+    cancelAnimationFrame(rafId);
+    if (audioReader) { try { await audioReader.cancel(); } catch(_) {} }
+    if (encoder.state === 'configured') {
+        try { await encoder.flush(); encoder.close(); } catch(e) { console.warn('[HW] flush err:', e); }
+    }
+    if (audioEncoder?.state === 'configured') {
+        try { await audioEncoder.flush(); audioEncoder.close(); } catch(_) {}
+    }
+    muxer.finalize();
+    return new Blob([muxer.target.buffer], { type: 'video/mp4' });
+}
 
-            if (format.includes('planar')) {
-                for (let ch = 0; ch < channels; ch++) {
-                    const plane = new TypedArray(frames);
-                    audioData.copyTo(plane, { planeIndex: ch });
-                    for (let i = 0; i < frames; i++) {
-                        out[i * channels + ch] = plane[i];
-                    }
-                }
-            } else {
-                audioData.copyTo(out, { planeIndex: 0 });
-            }
-            return { format: baseFormat, data: out };
+// ── MR FALLBACK (MediaRecorder) ───────────────────────────────────────────────
+function pickMime() {
+    const list = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1.42E01E',
+        'video/mp4',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm'
+    ];
+    if (!window.MediaRecorder?.isTypeSupported) return { mime: 'video/mp4', ext: 'mp4' };
+    for (const mime of list) {
+        try { if (MediaRecorder.isTypeSupported(mime)) return { mime, ext: mime.startsWith('video/mp4') ? 'mp4' : 'webm' }; } catch(_) {}
+    }
+    return { mime: 'video/mp4', ext: 'mp4' };
+}
+
+function startMR(audioTrack, fps, bitrate) {
+    const vidStream = canvas.captureStream(fps);
+    if (audioTrack) vidStream.addTrack(audioTrack);
+    const { mime, ext } = pickMime();
+    lastExt = ext;
+    let mr;
+    try { mr = new MediaRecorder(vidStream, { mimeType: mime, videoBitsPerSecond: bitrate }); }
+    catch(_) { mr = new MediaRecorder(vidStream); }
+    mrChunks = [];
+    mr.ondataavailable = e => { if (e.data?.size > 0) { mrChunks.push(e.data); recBytes += e.data.size; } };
+    mr.onstop = () => {
+        const blob = new Blob(mrChunks, { type: mime });
+        mrChunks = [];
+        onDone(blob, ext);
+    };
+    mr.start(500);
+    mrRecorder = mr;
+    encBadge.textContent = 'MediaRec';
+    encBadge.className   = 'mr';
+    log('MediaRecorder fallback: ' + mime);
+}
+
+// ── FELVÉTEL START / STOP ─────────────────────────────────────────────────────
+async function startRec() {
+    if (isRecording || !cameraStream) return;
+    isRecording = true;
+    recBytes = 0;
+    doneOverlay.classList.remove('on');
+
+    const track    = cameraStream.getVideoTracks()[0];
+    const settings = track?.getSettings?.() || {};
+    const fps      = Math.round(settings.frameRate || 30);
+    const bitrate  = Math.max(12_000_000, OUT_W * OUT_H * fps * 0.08);
+
+    fitPreview();
+
+    const audioTrack = buildAudioTrack();
+    startAudio();
+
+    if (useHW) {
+        try {
+            await startHW(audioTrack);
+        } catch(e) {
+            log('HW sikertelen, fallback: ' + e.message);
+            useHW = false;
+            startMR(audioTrack, fps, bitrate);
         }
-    </script>
+    } else {
+        startMR(audioTrack, fps, bitrate);
+    }
+
+    btnRecord.classList.add('recording');
+    setStatus('● REC');
+}
+
+async function stopRec() {
+    if (!isRecording) return;
+    isRecording = false;
+    btnRecord.classList.remove('recording');
+    setStatus('Mentés...');
+
+    if (hwRecorder) {
+        const blob = await stopHW();
+        stopAudio();
+        if (blob) onDone(blob, 'mp4');
+        else { setStatus(''); }
+    } else if (mrRecorder) {
+        try { mrRecorder.stop(); } catch(_) {}
+        mrRecorder = null;
+        stopAudio();
+        // onDone az mr.onstop-ból hívódik
+    }
+}
+
+// ── KÉSZ ─────────────────────────────────────────────────────────────────────
+function onDone(blob, ext) {
+    lastBlob = blob; lastExt = ext;
+    const mb = (blob.size / 1024 / 1024).toFixed(1);
+    doneInfo.textContent = `${ext.toUpperCase()} • ${mb} MB`;
+    doneOverlay.classList.add('on');
+    setStatus('');
+    log(`Kész: ${mb} MB`);
+}
+
+// ── VISSZASZÁMLÁLÁS ───────────────────────────────────────────────────────────
+function runCountdown(sec, cb) {
+    if (sec <= 0) { cb(); return; }
+    let n = sec;
+    countdown.textContent = n;
+    countdown.classList.add('on');
+    cdTimer = setInterval(() => {
+        n--;
+        if (n <= 0) {
+            clearInterval(cdTimer);
+            countdown.classList.remove('on');
+            cb();
+        } else {
+            countdown.textContent = n;
+        }
+    }, 1000);
+}
+
+// ── EVENTS ────────────────────────────────────────────────────────────────────
+btnRecord.disabled = true;
+btnRecord.addEventListener('click', () => {
+    if (isRecording) {
+        if (cdTimer) { clearInterval(cdTimer); cdTimer = null; countdown.classList.remove('on'); }
+        stopRec();
+    } else {
+        const sec = parseInt(inputCountdown.value, 10) || 0;
+        runCountdown(sec, startRec);
+    }
+});
+
+btnStart.addEventListener('click', async () => {
+    btnStart.disabled = true;
+    btnStart.textContent = 'Kamera indítás...';
+    // engedélykérés
+    try {
+        const tmp = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        tmp.getTracks().forEach(t => t.stop());
+    } catch(e) {
+        log('Engedély hiba: ' + e.message);
+        btnStart.disabled = false; btnStart.textContent = 'INDÍTÁS'; return;
+    }
+    await refreshCams();
+    const ok = await startCamera();
+    if (!ok) { btnStart.disabled = false; btnStart.textContent = 'INDÍTÁS'; return; }
+    startOverlay.classList.add('gone');
+    // fullscreen (user gesture-ből)
+    try {
+        const el = document.documentElement;
+        if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch(_) {}
+});
+
+// settings
+btnSettings.addEventListener('click', () => {
+    settingsDrawer.classList.add('on');
+    settingsBackdrop.classList.add('on');
+});
+[btnCloseSettings, settingsBackdrop].forEach(el =>
+    el.addEventListener('click', () => {
+        settingsDrawer.classList.remove('on');
+        settingsBackdrop.classList.remove('on');
+    })
+);
+camSelect.addEventListener('change', () => { if (cameraStream) startCamera(); });
+overlayFile.addEventListener('change', () => {
+    const f = overlayFile.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = e => loadOverlay(e.target.result, f.name);
+    r.readAsDataURL(f);
+});
+musicFile.addEventListener('change', async () => {
+    const f = musicFile.files[0]; if (!f) return;
+    try { await decodeAudio(await f.arrayBuffer(), f.name); }
+    catch(e) { log('Zene hiba: ' + e.message); }
+});
+
+// done overlay gombok
+btnDownload.addEventListener('click', () => {
+    if (!lastBlob) return;
+    const url = URL.createObjectURL(lastBlob);
+    const now = new Date();
+    const name = `KANDO_360_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.${lastExt}`;
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+});
+btnNewRec.addEventListener('click', () => {
+    lastBlob = null;
+    doneOverlay.classList.remove('on');
+    setStatus('');
+});
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', fitPreview);
+fitPreview();
+detectHW();
+loadOverlay(DEFAULT_OVERLAY + '?v=' + Date.now(), DEFAULT_OVERLAY);
+loadDefaultAudio();
+</script>
 </body>
-
 </html>
