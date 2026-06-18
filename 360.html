@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v0.8</title>
+    <title>360 HW Record Minimal v0.9</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -54,7 +54,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v0.8 booth autostart defaults</span><br>
+                    Build: <span>v0.9 audio monitor</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Actual: <span id="actualRes">-</span><br>
                     Aspect: <span id="statusAspect">-</span><br>
@@ -187,6 +187,7 @@
         let mixValue = 0;
         let mixGainMic = null;
         let mixGainFile = null;
+        let monitorGainFile = null;
         const OUTPUT_WIDTH = 720;
         const OUTPUT_HEIGHT = 1280;
         const TARGET_FPS = 60;
@@ -537,13 +538,13 @@
             }
             let mixedTrack = null;
             const micTrack = cameraStream.getAudioTracks()[0] || null;
-            if ('AudioEncoder' in window && (micTrack || audioFileBuffer)) {
+            if ('AudioEncoder' in window && typeof MediaStreamTrackProcessor !== 'undefined' && (micTrack || audioFileBuffer)) {
                 mixedTrack = buildMixedAudioTrack(micTrack, audioFileBuffer);
                 if (!mixedTrack) {
                     logMsg('Audio unavailable, recording video only.');
                 }
             } else if (micTrack || audioFileBuffer) {
-                logMsg('AudioEncoder missing, recording video only.');
+                logMsg('Audio encoding API missing, recording video only.');
             }
             recorder = new WebCodecsRecorder(videoTrack, mixedTrack, {
                 width: canvas.width,
@@ -632,6 +633,8 @@
             recordAudioSources = [];
             mixGainMic = recordAudioCtx.createGain();
             mixGainFile = recordAudioCtx.createGain();
+            monitorGainFile = recordAudioCtx.createGain();
+            monitorGainFile.gain.value = fileBuffer ? 1 : 0;
             updateMixGains();
             if (micTrack) {
                 const micStream = new MediaStream([micTrack]);
@@ -644,7 +647,9 @@
                 const fileSource = recordAudioCtx.createBufferSource();
                 fileSource.buffer = fileBuffer;
                 fileSource.connect(mixGainFile);
+                fileSource.connect(monitorGainFile);
                 mixGainFile.connect(dest);
+                monitorGainFile.connect(recordAudioCtx.destination);
                 recordAudioSources.push(fileSource);
             }
             return dest.stream.getAudioTracks()[0] || null;
@@ -669,6 +674,7 @@
             recordAudioSources = [];
             mixGainMic = null;
             mixGainFile = null;
+            monitorGainFile = null;
             if (recordAudioCtx) {
                 try { recordAudioCtx.close(); } catch (_) {}
                 recordAudioCtx = null;
@@ -681,6 +687,7 @@
             const fileLevel = v >= 0 ? 1 : 1 + v;
             if (mixGainMic) mixGainMic.gain.value = micLevel;
             if (mixGainFile) mixGainFile.gain.value = fileLevel;
+            if (monitorGainFile) monitorGainFile.gain.value = fileLevel;
         }
 
         if (btnOpenOutput) {
@@ -899,7 +906,7 @@
             }
 
             getAudioInfo() {
-                if (!this.audioTrack || !('AudioEncoder' in window)) return null;
+                if (!this.audioTrack || !('AudioEncoder' in window) || typeof MediaStreamTrackProcessor === 'undefined') return null;
                 const settings = this.audioTrack.getSettings();
                 return {
                     codec: 'aac',
