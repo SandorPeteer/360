@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.13</title>
+    <title>360 HW Record Minimal v1.14</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.13</span><br>
+                    Build: <span>v1.14</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -659,7 +659,7 @@
             const track = cameraStream.getVideoTracks()[0];
             const settings = track && track.getSettings ? track.getSettings() : {};
             setCanvasSizeFromTrack(track);
-            const fps = settings.frameRate || 30;
+            const fps = Math.round(settings.frameRate || 30);
             const bitrateValue = bitrateInput ? parseFloat(bitrateInput.value) : 0;
             const bitrate = (bitrateValue && bitrateValue > 0)
                 ? Math.round(bitrateValue * 1_000_000)
@@ -1119,21 +1119,24 @@
             }
 
             _installCanvasHook(framerate) {
-                // iPad Safari path: capture from canvas inside the unified draw loop.
-                // Timestamps are computed monotonically per frame counter to avoid jitter.
                 const canvasRef = this.sourceCanvas;
                 if (!canvasRef) throw new Error('Canvas source missing.');
-                const frameDurUs = 1_000_000 / framerate;
-                const frameIntervalMs = 1000 / framerate;
-                let lastCaptureMs = -Infinity;
+                // Round to nearest standard rate to avoid sub-fps drift (59.94 → 60, 29.97 → 30)
+                const roundedFps = Math.round(framerate);
+                const frameDurUs = 1_000_000 / roundedFps;
+                // Allow up to half a frame early to absorb RAF timing jitter
+                const halfFrameMs = (1000 / roundedFps) * 0.5;
+                let nextFrameMs = -Infinity;
 
                 captureCallback = (rafTs) => {
                     if (!this.isRecording || this.encoder.state !== 'configured') return;
-                    const elapsed = rafTs - lastCaptureMs;
-                    if (elapsed < frameIntervalMs - 1) return; // not yet time for next frame
-                    lastCaptureMs = rafTs;
-                    // Skip frame if encoder is backed up (avoids RAM growth and timestamp drift)
-                    if (this.encoder.encodeQueueSize > 1) return;
+                    if (rafTs < nextFrameMs) return;
+                    // Schedule next frame deadline (not based on rafTs to avoid drift accumulation)
+                    nextFrameMs = nextFrameMs === -Infinity
+                        ? rafTs + (1000 / roundedFps) - halfFrameMs
+                        : nextFrameMs + (1000 / roundedFps);
+                    // Do NOT skip on encodeQueueSize — dropping frames causes timestamp gaps and stuttering.
+                    // The encoder queue is hardware-backed on Safari 26 and drains fast enough at 60fps.
                     try {
                         const tsUs = Math.round(this.frameCounter * frameDurUs);
                         const frame = new VideoFrame(canvasRef, { timestamp: tsUs, duration: Math.round(frameDurUs) });
