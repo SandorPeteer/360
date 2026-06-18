@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.11</title>
+    <title>360 HW Record Minimal v1.12</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -40,6 +40,12 @@
         #btnStartBooth[data-step="fullscreen"] { background: #2563eb; }
         #btnStartBooth[data-step="camera"] { background: #16a34a; }
         #boothStepText { color: #cbd5e1; font-size: 13px; letter-spacing: .04em; }
+        #countdownOverlay { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); pointer-events: none; }
+        #countdownOverlay.hidden { display: none; }
+        #countdownNumber { font-size: clamp(120px, 28vw, 260px); font-weight: 900; color: #fff; text-shadow: 0 0 60px rgba(0,0,0,.8); line-height: 1; user-select: none; }
+        #processingOverlay { position: fixed; inset: 0; z-index: 28; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: rgba(0,0,0,.72); pointer-events: none; }
+        #processingOverlay.hidden { display: none; }
+        #processingText { color: #fff; font-size: 22px; font-weight: 700; letter-spacing: .06em; }
     </style>
 </head>
 
@@ -58,6 +64,8 @@
             <video id="playback" controls style="display:none"></video>
         </div>
 
+        <div id="countdownOverlay" class="hidden"><div id="countdownNumber"></div></div>
+        <div id="processingOverlay" class="hidden"><div id="processingText">Feldolgozás...</div></div>
         <div id="menuBackdrop"></div>
         <div id="menuDrawer">
             <div id="menuHeader">
@@ -68,7 +76,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.11</span><br>
+                    Build: <span>v1.12</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -159,6 +167,11 @@
         const menuBackdrop = document.getElementById('menuBackdrop');
         const menuClose = document.getElementById('menuClose');
         const bitrateInput = document.getElementById('bitrateInput');
+
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const countdownNumber = document.getElementById('countdownNumber');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const processingText = document.getElementById('processingText');
 
         const liveVideo = document.createElement('video');
         liveVideo.autoplay = true;
@@ -462,8 +475,10 @@
                 return;
             }
             useWebCodecs = true;
-            const audioStatusText = ('AudioEncoder' in window) ? '+ audio encoder' : 'video-only capable';
-            encoderStatus.textContent = `WebCodecs HW ready (${audioStatusText})`;
+            const hasAE = 'AudioEncoder' in window;
+            const hasMSTP = typeof MediaStreamTrackProcessor !== 'undefined';
+            const audioStatusText = (hasAE && hasMSTP) ? '+ audio enc' : (hasAE ? '+ AudioEnc (no MSTP)' : 'video-only');
+            encoderStatus.textContent = `WebCodecs HW (${audioStatusText})`;
             if (browserWarning) browserWarning.style.display = 'none';
         }
 
@@ -553,8 +568,9 @@
             playback.src = currentBlobUrl;
             playback.style.display = 'block';
             preview.style.display = 'none';
+            btnRecord.textContent = 'REC';
             if (outputActions) { outputActions.querySelectorAll('button').forEach(b => b.disabled = false); }
-            logMsg(`Saved (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+            logMsg(`Kész (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
             recBytes = 0;
         }
 
@@ -602,12 +618,26 @@
             logMsg('Recording (MediaRecorder)...');
         }
 
+        async function runCountdown(from = 3) {
+            if (!countdownOverlay || !countdownNumber) return;
+            countdownOverlay.classList.remove('hidden');
+            for (let i = from; i >= 1; i--) {
+                countdownNumber.textContent = String(i);
+                await new Promise((r) => setTimeout(r, 1000));
+            }
+            countdownOverlay.classList.add('hidden');
+        }
+
         async function startRecording() {
             if (!cameraStream) {
                 logMsg('Start the camera first.');
                 return;
             }
             clearOutput();
+
+            // 3-2-1 countdown before recording starts
+            await runCountdown(3);
+
             const track = cameraStream.getVideoTracks()[0];
             const settings = track && track.getSettings ? track.getSettings() : {};
             setCanvasSizeFromTrack(track);
@@ -624,15 +654,10 @@
             recBytes = 0;
             recStartMs = performance.now();
 
-            const hasAudioEncoder = ('AudioEncoder' in window) && (typeof MediaStreamTrackProcessor !== 'undefined');
-            if (!useWebCodecs || !hasAudioEncoder) {
-                if (!useWebCodecs) {
-                    logMsg('WebCodecs N/A – MediaRecorder fallback');
-                } else {
-                    logMsg('No AudioEncoder – MediaRecorder fallback (hang is lesz)');
-                }
+            if (!useWebCodecs) {
+                logMsg('WebCodecs N/A – MediaRecorder fallback');
                 await startRecordingMediaRecorder(fps, bitrate);
-                btnRecord.textContent = 'Stop recording';
+                btnRecord.textContent = 'STOP';
                 if (recStatsTimer) clearInterval(recStatsTimer);
                 recStatsTimer = setInterval(() => {
                     const elapsed = Math.max(0.001, (performance.now() - recStartMs) / 1000);
@@ -641,8 +666,17 @@
                 return;
             }
 
-            setAudioStatus(audioFileBuffer ? `Music ready: ${audioFileName || 'loaded'}` : 'No music loaded');
-            const musicTrack = audioFileBuffer ? buildMixedAudioTrack(null, audioFileBuffer) : null;
+            // WebCodecs path: video-only HW encoding, audio plays separately and is muxed in if AudioEncoder available
+            const hasAudioEnc = ('AudioEncoder' in window);
+            const hasMSTP = (typeof MediaStreamTrackProcessor !== 'undefined');
+            const musicTrack = (audioFileBuffer && hasAudioEnc && hasMSTP)
+                ? buildMixedAudioTrack(null, audioFileBuffer)
+                : null;
+
+            setAudioStatus(audioFileBuffer
+                ? (musicTrack ? `Music → WebCodecs encoder` : `Music plays live (video-only encode)`)
+                : 'No music loaded');
+
             recorder = new WebCodecsRecorder(track, musicTrack, {
                 width: canvas.width,
                 height: canvas.height,
@@ -654,16 +688,16 @@
                 await recorder.start();
                 startAudioMixPlayback();
                 if (recorder.chosenConfig) {
-                    encoderStatus.textContent = `WebCodecs ${recorder.chosenConfig.codec || 'avc1'} ${canvas.width}x${canvas.height}@${fps}`;
+                    encoderStatus.textContent = `WebCodecs HW ${recorder.chosenConfig.codec || 'avc1'} ${canvas.width}x${canvas.height}@${fps}`;
                 } else {
-                    encoderStatus.textContent = 'WebCodecs running';
+                    encoderStatus.textContent = 'WebCodecs HW running';
                 }
             } catch (e) {
                 console.error(e);
                 logMsg('WebCodecs failed – MediaRecorder fallback');
                 recorder = null;
                 await startRecordingMediaRecorder(fps, bitrate);
-                btnRecord.textContent = 'Stop recording';
+                btnRecord.textContent = 'STOP';
                 return;
             }
 
@@ -673,14 +707,17 @@
                 const avgMbps = (recBytes * 8) / (elapsed * 1_000_000);
                 if (statusBitrate) statusBitrate.textContent = `${avgMbps.toFixed(1)} Mbps`;
             }, 500);
-            btnRecord.textContent = 'Stop recording';
-            logMsg('Recording...');
+            btnRecord.textContent = 'STOP';
+            logMsg('REC...');
         }
 
         async function stopRecording() {
             if (!isRecording) return;
             isRecording = false;
-            btnRecord.textContent = 'Start recording';
+            btnRecord.textContent = 'REC';
+            btnRecord.disabled = true;
+
+            if (processingOverlay) processingOverlay.classList.remove('hidden');
 
             if (mediaRecorderFallback) {
                 try {
@@ -691,16 +728,19 @@
                 stopAudioMix();
             } else if (recorder) {
                 try {
-                    logMsg('Stopping...');
+                    logMsg('Feldolgozás...');
                     const blob = await recorder.stop();
                     handleRecordingComplete(blob, 'mp4');
                 } catch (e) {
                     console.error(e);
-                    logMsg(`Stop failed: ${e && e.message ? e.message : 'unknown error'}`);
+                    logMsg(`Hiba: ${e && e.message ? e.message : 'unknown error'}`);
                 }
                 recorder = null;
                 stopAudioMix();
             }
+
+            if (processingOverlay) processingOverlay.classList.add('hidden');
+            btnRecord.disabled = false;
 
             if (recStatsTimer) {
                 clearInterval(recStatsTimer);
@@ -733,9 +773,14 @@
             btnStartBooth.addEventListener('click', startBoothFromGesture);
         }
         btnRecord.addEventListener('click', async () => {
+            if (btnRecord.disabled) return;
             await requestFullscreenMode();
-            if (isRecording) await stopRecording();
-            else await startRecording();
+            if (isRecording) {
+                await stopRecording();
+            } else {
+                btnRecord.textContent = '3...';
+                await startRecording();
+            }
         });
         document.addEventListener('fullscreenchange', syncFullscreenUi);
         document.addEventListener('webkitfullscreenchange', syncFullscreenUi);
@@ -1004,8 +1049,8 @@
             }
 
             getAudioInfo() {
-                if (!this.audioTrack || !('AudioEncoder' in window) || typeof MediaStreamTrackProcessor === 'undefined') return null;
-                const settings = this.audioTrack.getSettings();
+                if (!this.audioTrack || !('AudioEncoder' in window)) return null;
+                const settings = this.audioTrack.getSettings ? this.audioTrack.getSettings() : {};
                 return {
                     codec: 'aac',
                     numberOfChannels: settings.channelCount || 2,
