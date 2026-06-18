@@ -1650,7 +1650,7 @@
                 </div>
 
                 <div style="padding: 8px; background: rgba(32, 211, 193, 0.1); border: 1px solid rgba(32, 211, 193, 0.3); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">
-                    ℹ️ Alap cél: FULL HD (16:9 / 9:16) 60 fps, ha nem megy, automatikusan 30 fps
+                    ℹ️ Alap cél: HD (720p / 9:16) 60 fps, ha nem megy, automatikusan 30 fps
                 </div>
 
                 <label>Overlay illesztés</label>
@@ -1717,8 +1717,8 @@
 
                         <label>Kamera felbontás</label>
                         <select id="cameraResolution" onchange="applyCameraResolutionFromUI(true)">
-                            <option value="1280x720">1280×720 (HD)</option>
-                            <option value="1920x1080" selected>1920×1080 (Full HD)</option>
+                            <option value="1280x720" selected>1280×720 (HD)</option>
+                            <option value="1920x1080">1920×1080 (Full HD)</option>
                             <option value="2560x1440">2560×1440 (QHD)</option>
                             <option value="3840x2160">3840×2160 (4K)</option>
                         </select>
@@ -1746,7 +1746,7 @@
 
                         <label style="display:flex; align-items:center; gap:8px;">
                             <input type="checkbox" id="useSourceResolution" style="width:auto;" onchange="applyUseSourceResolutionFromUI()" checked>
-                            FHD lock (16:9/9:16) • 60 fps
+                            HD lock (16:9/9:16) • 60 fps
                         </label>
 
                         <label>Preferált formátum</label>
@@ -1875,8 +1875,8 @@
         let previewFps = 30;
         let originalPreviewFps = 30; // Store original preview FPS during recording
         let previewFpsManual = 30;
-        let cameraWidth = 1920;
-        let cameraHeight = 1080;
+        let cameraWidth = 1280;
+        let cameraHeight = 720;
         let useSourceResolution = true;
         const previewMaxEdge = 1280;
         let autoMaxCameraApplied = false;
@@ -1928,15 +1928,25 @@
         function isMobileOrTablet() {
             const ua = navigator.userAgent || '';
             const isMobile = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+            // iPadOS 13+ "Request Desktop Website" módban Macintosh UA-t küld,
+            // de maxTouchPoints > 1 marad (Mac trackpad max 1 touch point)
+            const isIPadOS = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
             const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-            return isMobile || isTouch;
+            return isMobile || isIPadOS || isTouch;
         }
 
         function getViewportIsPortrait() {
-            // matchMedia az iOS Safarin a legmegbízhatóbb (azonnal frissül forgatáskor)
-            if (window.matchMedia) return window.matchMedia('(orientation: portrait)').matches;
-            if (window.screen && window.screen.orientation && window.screen.orientation.type)
+            // 1. screen.orientation API (Chrome, Firefox, iOS 16.4+)
+            if (window.screen && window.screen.orientation && window.screen.orientation.type) {
                 return window.screen.orientation.type.startsWith('portrait');
+            }
+            // 2. window.orientation (iOS Safari legacy: 0/180 = portrait, 90/-90 = landscape)
+            if (typeof window.orientation === 'number') {
+                return window.orientation === 0 || window.orientation === 180;
+            }
+            // 3. matchMedia
+            if (window.matchMedia) return window.matchMedia('(orientation: portrait)').matches;
+            // 4. innerWidth/innerHeight fallback
             const vw = window.innerWidth || 0;
             const vh = window.innerHeight || 0;
             if (vw && vh) return vh >= vw;
@@ -2315,27 +2325,21 @@
             const container = document.getElementById('orientationModeContainer');
             if (!container) return;
 
-            const isMobile = isMobileOrTablet();
-
             container.innerHTML = `
                 <label>Orientáció mód</label>
                 <select id="outputAspect" onchange="applyOutputAspectFromUI()">
+                    <option value="portrait" selected>Álló (9:16)</option>
                     <option value="auto">Auto (szenzor)</option>
                     <option value="landscape">Fekvő (16:9)</option>
-                    <option value="portrait">Álló (9:16)</option>
                 </select>
-                ${isMobile ? '<div style="padding: 6px 8px; background: rgba(32, 211, 193, 0.12); border: 1px solid rgba(32, 211, 193, 0.35); border-radius: 6px; font-size: 10px; color: var(--accent-2); margin: 4px 0;">📱 Ha az auto nem jó, válts kézire itt.</div>' : ''}
             `;
 
             const sel = container.querySelector('#outputAspect');
             if (sel) {
-                if (isMobile) {
-                    sel.value = 'auto';
-                    isAutoOrientationEnabled = true;
-                } else {
-                    sel.value = outputAspectMode;
-                    isAutoOrientationEnabled = false;
-                }
+                // Alapértelmezett: álló mód minden platformon
+                sel.value = 'portrait';
+                outputAspectMode = 'portrait';
+                isAutoOrientationEnabled = false;
             }
 
             if (isAutoOrientationEnabled) {
@@ -2615,8 +2619,8 @@
             const caps = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : null;
             const maxFps = caps && caps.frameRate && caps.frameRate.max ? caps.frameRate.max : 0;
             const wantPortrait = outputAspectMode === 'portrait';
-            const lockWidth = wantPortrait ? 1080 : 1920;
-            const lockHeight = wantPortrait ? 1920 : 1080;
+            const lockWidth = wantPortrait ? 720 : 1280;
+            const lockHeight = wantPortrait ? 1280 : 720;
             const targetAspect = wantPortrait ? (9 / 16) : (16 / 9);
             const attempts = [
                 ...(maxFps >= 60 ? [{ w: lockWidth, h: lockHeight, fps: 60, exact: true }] : []),
@@ -2682,7 +2686,7 @@
 
         function getLockedCanvasSize() {
             const wantPortrait = outputAspectMode === 'portrait';
-            return wantPortrait ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+            return wantPortrait ? { w: 720, h: 1280 } : { w: 1280, h: 720 };
         }
 
         function chooseCanvasSizeByMode(sourceW, sourceH) {
@@ -3383,8 +3387,8 @@
                 const targetHeight = cameraHeight || 1080;
                 const targetFps = cameraFps || 60;
                 const wantPortrait = outputAspectMode === 'portrait';
-                const lockWidth = wantPortrait ? 1080 : 1920;
-                const lockHeight = wantPortrait ? 1920 : 1080;
+                const lockWidth = wantPortrait ? 720 : 1280;
+                const lockHeight = wantPortrait ? 1280 : 720;
                 const constraints = {
                     video: {
                         width: useNative ? { ideal: lockWidth } : { ideal: targetWidth },
@@ -4453,13 +4457,7 @@
                 autoPreferMp4OnAndroid();
                 return;
             }
-            if (isAndroidDevice() && getSupportedMp4Mime()) {
-                useWebCodecs = false;
-                console.log('[WebCodecs] Android prefers MediaRecorder H.264');
-                setEncoderBadge('MR READY', 'gpu');
-                autoPreferMp4OnAndroid();
-                return;
-            }
+            // Android-on is WebCodecs HW encoding (ne tiltjuk le)
 
             // Test H.264 encoding support
             try {
