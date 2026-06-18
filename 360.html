@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v0.7</title>
+    <title>360 HW Record Minimal v0.8</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -54,7 +54,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v0.7 raw camera contain</span><br>
+                    Build: <span>v0.8 booth autostart defaults</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Actual: <span id="actualRes">-</span><br>
                     Aspect: <span id="statusAspect">-</span><br>
@@ -190,6 +190,8 @@
         const OUTPUT_WIDTH = 720;
         const OUTPUT_HEIGHT = 1280;
         const TARGET_FPS = 60;
+        const DEFAULT_OVERLAY_URL = 'overlay.png';
+        const DEFAULT_AUDIO_URL = 'music.m4a';
         let activeCameraDeviceId = '';
         let activeMicDeviceId = '';
 
@@ -272,22 +274,54 @@
             }
         }
 
+        function setOverlaySource(src, label) {
+            overlayReady = false;
+            overlayCrop = null;
+            overlayImg.onload = () => {
+                overlayCrop = computeAlphaCrop(overlayImg);
+                overlayReady = true;
+                logMsg(`Overlay loaded: ${label}`);
+            };
+            overlayImg.onerror = () => {
+                overlayReady = false;
+                logMsg(`Overlay not loaded: ${label}`);
+            };
+            overlayImg.src = src;
+        }
+
+        async function loadDefaultOverlay() {
+            setOverlaySource(`${DEFAULT_OVERLAY_URL}?v=${Date.now()}`, DEFAULT_OVERLAY_URL);
+        }
+
         overlayFile.addEventListener('change', () => {
             const file = overlayFile.files[0];
             if (!file) return;
             const reader = new FileReader();
-            overlayReady = false;
-            overlayCrop = null;
-            reader.onload = (e) => {
-                overlayImg.onload = () => {
-                    overlayCrop = computeAlphaCrop(overlayImg);
-                    overlayReady = true;
-                    logMsg('Overlay loaded.');
-                };
-                overlayImg.src = e.target.result;
-            };
+            reader.onload = (e) => setOverlaySource(e.target.result, file.name || 'custom overlay');
             reader.readAsDataURL(file);
         });
+
+        async function decodeAudioArrayBuffer(arrayBuffer, label) {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            audioFileBuffer = await ctx.decodeAudioData(arrayBuffer);
+            audioFileName = label;
+            await ctx.close();
+            logMsg(`Audio loaded: ${audioFileName}`);
+        }
+
+        async function loadDefaultAudio() {
+            audioFileBuffer = null;
+            audioFileName = '';
+            try {
+                const res = await fetch(`${DEFAULT_AUDIO_URL}?v=${Date.now()}`, { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.arrayBuffer();
+                await decodeAudioArrayBuffer(data, DEFAULT_AUDIO_URL);
+            } catch (e) {
+                console.warn('[AUDIO] default load failed:', e);
+                logMsg(`Default audio not loaded: ${DEFAULT_AUDIO_URL}`);
+            }
+        }
 
         if (audioMixFile) {
             audioMixFile.addEventListener('change', async () => {
@@ -296,12 +330,8 @@
                 audioFileName = '';
                 if (!file) return;
                 try {
-                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
                     const data = await file.arrayBuffer();
-                    audioFileBuffer = await ctx.decodeAudioData(data);
-                    audioFileName = file.name || 'audio';
-                    await ctx.close();
-                    logMsg(`Audio loaded: ${audioFileName}`);
+                    await decodeAudioArrayBuffer(data, file.name || 'audio');
                 } catch (e) {
                     console.error(e);
                     logMsg('Audio load failed.');
@@ -384,6 +414,10 @@
             }
 
             micSelect.innerHTML = '';
+            const noMicOpt = document.createElement('option');
+            noMicOpt.value = '';
+            noMicOpt.textContent = 'No mic (music only)';
+            micSelect.appendChild(noMicOpt);
             mics.forEach((mic, idx) => {
                 const opt = document.createElement('option');
                 opt.value = mic.deviceId;
@@ -410,12 +444,12 @@
             };
             const constraints = {
                 video: videoConstraints,
-                audio: {
-                    ...(micId ? { deviceId: { exact: micId } } : {}),
+                audio: micId ? {
+                    deviceId: { exact: micId },
                     echoCancellation: false,
                     noiseSuppression: false,
                     autoGainControl: false
-                }
+                } : false
             };
             try {
                 cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -1070,8 +1104,18 @@
                 if (track) await applyResolutionSelection(track, false);
             });
         }
-        refreshDevices();
-        detectWebCodecsSupport();
+        async function initBooth() {
+            await detectWebCodecsSupport();
+            await Promise.allSettled([
+                loadDefaultOverlay(),
+                loadDefaultAudio(),
+                refreshDevices()
+            ]);
+            setTimeout(() => {
+                if (!cameraStream) startCamera();
+            }, 250);
+        }
+        initBooth();
 
         function buildInterleavedAudioData(audioData) {
             const format = audioData.format;
