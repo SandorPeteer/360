@@ -24,16 +24,16 @@
         button:disabled { opacity: .6; cursor: not-allowed; }
         .buttons { display: grid; gap: 8px; }
         #preview, #playback { max-width: 100%; max-height: 100%; background: #0b0f14; display: block; }
-        #menuBtn { position: fixed; top: 14px; right: 14px; z-index: 20; width: 44px; height: 44px; border-radius: 10px; }
+        #menuBtn { display: none; }
         #menuBackdrop { position: fixed; inset: 0; background: rgba(3, 7, 18, .45); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 14; }
         #menuBackdrop.open { opacity: 1; pointer-events: auto; }
-        #menuDrawer { position: fixed; top: 0; right: 0; height: 100dvh; width: min(360px, 92vw); background: #eef1f4; transform: translateX(100%); transition: transform .2s ease; z-index: 15; padding: 12px; overflow: auto; }
+        #menuDrawer { position: fixed; top: 0; right: 0; height: 100dvh; width: 360px; background: #eef1f4; transform: translateX(0); z-index: 15; padding: 12px; overflow: auto; }
         #menuHeader { display: flex; justify-content: flex-end; }
-        #menuClose { width: 36px; height: 36px; border-radius: 8px; }
-        #menuDrawer.open { transform: translateX(0); }
+        #menuClose { width: 36px; height: 36px; border-radius: 8px; display: none; }
+        #menuBackdrop { display: none !important; }
         #recBtnWrap { position: fixed; right: 16px; bottom: 16px; z-index: 20; }
         #btnRecord { width: 140px; height: 44px; border-radius: 999px; }
-        #videoWrap { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: flex-start; padding: 0 72px 0 0; overflow: hidden; }
+        #videoWrap { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: flex-start; padding: 0 380px 0 0; overflow: hidden; }
         #startOverlay { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; background: #0b0f14; }
         #startOverlay.hidden { display: none; }
         #btnStartBooth { width: min(420px, 86vw); min-height: 86px; border-radius: 18px; font-size: 24px; letter-spacing: .08em; background: #16a34a; color: #fff; border: 0; box-shadow: 0 18px 50px rgba(0,0,0,.45); }
@@ -110,15 +110,15 @@
                 </div>
                 <div class="row">
                     <label for="bitrateInput">Avg bitrate (Mbps, 0 = auto)</label>
-                    <input id="bitrateInput" type="number" min="0" max="200" value="0">
+                    <input id="bitrateInput" type="number" min="0" max="200" value="20">
                 </div>
                 <div class="status">
                     <div id="log"></div>
                 </div>
-                <div class="buttons" id="outputActions" style="display:none">
-                    <button id="btnOpenOutput">Open in new tab</button>
-                    <button id="btnDownloadOutput">Download</button>
-                    <button id="btnClearOutput">Clear</button>
+                <div class="buttons" id="outputActions">
+                    <button id="btnOpenOutput" disabled>Open in new tab</button>
+                    <button id="btnDownloadOutput" disabled>Download</button>
+                    <button id="btnClearOutput" disabled>Clear</button>
                 </div>
             </div>
         </div>
@@ -557,7 +557,7 @@
             playback.src = currentBlobUrl;
             playback.style.display = 'block';
             preview.style.display = 'none';
-            if (outputActions) outputActions.style.display = 'grid';
+            if (outputActions) { outputActions.querySelectorAll('button').forEach(b => b.disabled = false); }
             logMsg(`Saved (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
             recBytes = 0;
         }
@@ -724,8 +724,8 @@
             try {
                 if (boothStep === 'camera') {
                     if (startOverlay) startOverlay.classList.add('hidden');
-                    await startCamera();
-                    await requestFullscreenMode();
+                    // Fullscreen és kamera egyszerre – nem kell egymásra várni
+                    await Promise.all([requestFullscreenMode(), startCamera()]);
                     return;
                 }
                 await requestFullscreenMode();
@@ -760,7 +760,7 @@
             playback.removeAttribute('src');
             playback.style.display = 'none';
             preview.style.display = 'block';
-            if (outputActions) outputActions.style.display = 'none';
+            if (outputActions) { outputActions.querySelectorAll('button').forEach(b => b.disabled = true); }
         }
 
         function buildMixedAudioTrack(micTrack, fileBuffer) {
