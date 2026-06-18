@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v0.2</title>
+    <title>360 HW Record Minimal v0.3</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -54,7 +54,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v0.2 video-only fallback</span><br>
+                    Build: <span>v0.3 fixed 9:16 output</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Actual: <span id="actualRes">-</span><br>
                     Aspect: <span id="statusAspect">-</span><br>
@@ -187,17 +187,17 @@
         let mixValue = 0;
         let mixGainMic = null;
         let mixGainFile = null;
+        const OUTPUT_WIDTH = 720;
+        const OUTPUT_HEIGHT = 1280;
+        const TARGET_FPS = 60;
 
         function logMsg(msg) {
             logEl.textContent = msg;
         }
 
         function setCanvasSizeFromTrack(track) {
-            const settings = track && track.getSettings ? track.getSettings() : {};
-            const w = settings.width || 1920;
-            const h = settings.height || 1080;
-            canvas.width = w;
-            canvas.height = h;
+            canvas.width = OUTPUT_WIDTH;
+            canvas.height = OUTPUT_HEIGHT;
             applyPreviewFit();
         }
 
@@ -397,8 +397,15 @@
             stopCamera();
             const camId = camSelect.value;
             const micId = micSelect.value;
+            const videoConstraints = {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                frameRate: { ideal: TARGET_FPS, min: 30 },
+                facingMode: 'user',
+                ...(camId ? { deviceId: { exact: camId } } : {})
+            };
             const constraints = {
-                video: camId ? { deviceId: { exact: camId } } : true,
+                video: videoConstraints,
                 audio: {
                     ...(micId ? { deviceId: { exact: micId } } : {}),
                     echoCancellation: false,
@@ -683,66 +690,53 @@
         function populateResolutionOptions(track) {
             if (!resolution) return;
             resolution.innerHTML = '';
-            const optMax = document.createElement('option');
-            optMax.value = 'max';
-            optMax.textContent = 'MAX (auto)';
-            resolution.appendChild(optMax);
-
-            const caps = track && track.getCapabilities ? track.getCapabilities() : {};
-            const maxW = caps.width && caps.width.max ? caps.width.max : 1920;
-            const maxH = caps.height && caps.height.max ? caps.height.max : 1080;
             const presets = [
-                [maxW, maxH],
-                [1920, 1080],
-                [1280, 720],
-                [640, 480]
+                ['booth', 'Booth source auto (1280x720 @ max FPS)'],
+                ['fhd', 'FHD source (1920x1080)'],
+                ['hd', 'HD source (1280x720)'],
+                ['square', 'Square source (1440x1440 fallback)']
             ];
-            const seen = new Set();
-            presets.forEach(([w, h]) => {
-                if (w > maxW || h > maxH) return;
-                const key = `${w}x${h}`;
-                if (seen.has(key)) return;
-                seen.add(key);
+            presets.forEach(([value, label]) => {
                 const opt = document.createElement('option');
-                opt.value = key;
-                opt.textContent = key;
+                opt.value = value;
+                opt.textContent = label;
                 resolution.appendChild(opt);
             });
-            resolution.value = 'max';
+            resolution.value = 'booth';
         }
 
         async function applyResolutionSelection(track, useMaxByDefault) {
             if (!track || !track.applyConstraints) return;
             const caps = track.getCapabilities ? track.getCapabilities() : {};
-            const maxW = caps.width && caps.width.max ? caps.width.max : null;
-            const maxH = caps.height && caps.height.max ? caps.height.max : null;
             const maxFps = caps.frameRate && caps.frameRate.max ? caps.frameRate.max : null;
-            const selected = (useMaxByDefault || !resolution) ? 'max' : resolution.value;
-            let width;
-            let height;
-            if (selected === 'max' && maxW && maxH) {
-                width = maxW;
-                height = maxH;
-            } else if (selected && selected.includes('x')) {
-                const parts = selected.split('x').map((n) => Number(n));
-                width = parts[0];
-                height = parts[1];
-            }
-            try {
-                const constraints = { width: width ? { exact: width } : undefined, height: height ? { exact: height } : undefined };
-                if (maxFps) constraints.frameRate = { ideal: maxFps };
-                await track.applyConstraints(constraints);
-            } catch (e) {
+            const selected = (useMaxByDefault || !resolution) ? 'booth' : resolution.value;
+            const wantedFps = Math.min(maxFps || TARGET_FPS, TARGET_FPS);
+            const profiles = {
+                booth: [
+                    { width: 1280, height: 720, frameRate: wantedFps },
+                    { width: 1920, height: 1080, frameRate: wantedFps },
+                    { width: 1440, height: 1440, frameRate: wantedFps },
+                    { frameRate: wantedFps }
+                ],
+                fhd: [{ width: 1920, height: 1080, frameRate: wantedFps }],
+                hd: [{ width: 1280, height: 720, frameRate: wantedFps }],
+                square: [{ width: 1440, height: 1440, frameRate: wantedFps }]
+            };
+            const attempts = profiles[selected] || profiles.booth;
+            for (const wanted of attempts) {
                 try {
-                    const fallback = { width: width ? { ideal: width } : undefined, height: height ? { ideal: height } : undefined };
-                    if (maxFps) fallback.frameRate = { ideal: maxFps };
-                    await track.applyConstraints(fallback);
-                } catch (err) {
-                    console.warn('[CAM] applyConstraints failed:', err);
+                    const constraints = {};
+                    if (wanted.width) constraints.width = { ideal: wanted.width };
+                    if (wanted.height) constraints.height = { ideal: wanted.height };
+                    if (wanted.frameRate) constraints.frameRate = { ideal: wanted.frameRate };
+                    await track.applyConstraints(constraints);
+                    break;
+                } catch (e) {
+                    console.warn('[CAM] applyConstraints failed:', wanted, e);
                 }
             }
             const settings = track.getSettings ? track.getSettings() : {};
-            actualRes.textContent = `${settings.width || '?'}x${settings.height || '?'}`;
+            actualRes.textContent = `${settings.width || '?'}x${settings.height || '?'} → ${OUTPUT_WIDTH}x${OUTPUT_HEIGHT}`;
             if (statusAspect && settings.width && settings.height) {
                 statusAspect.textContent = `${settings.width}:${settings.height}`;
             }
