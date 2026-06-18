@@ -4,7 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.1</title>
+    <title>360 HW Record Minimal v1.2</title>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0b0f14">
+    <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ccircle cx='32' cy='32' r='20' fill='%232bd4a7'/%3E%3Ccircle cx='32' cy='32' r='10' fill='%230b0f14'/%3E%3C/svg%3E">
     <style>
         * { box-sizing: border-box; }
@@ -55,7 +60,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.1 audio diagnostics</span><br>
+                    Build: <span>v1.2 fullscreen audio loop</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -205,6 +210,22 @@
 
         function setAudioStatus(msg) {
             if (audioStatus) audioStatus.textContent = msg || '-';
+        }
+
+        async function requestFullscreenMode() {
+            const el = document.documentElement;
+            try {
+                if (document.fullscreenElement || document.webkitFullscreenElement) return true;
+                if (el.requestFullscreen) {
+                    await el.requestFullscreen();
+                    return true;
+                }
+                if (el.webkitRequestFullscreen) {
+                    el.webkitRequestFullscreen();
+                    return true;
+                }
+            } catch (_) {}
+            return false;
         }
 
         function setCanvasSizeFromTrack(track) {
@@ -623,11 +644,19 @@
             }
         }
 
-        btnStartCam.addEventListener('click', startCamera);
+        btnStartCam.addEventListener('click', async () => {
+            await requestFullscreenMode();
+            await startCamera();
+        });
         btnRecord.addEventListener('click', async () => {
+            await requestFullscreenMode();
             if (isRecording) await stopRecording();
             else await startRecording();
         });
+
+        document.addEventListener('pointerdown', () => {
+            requestFullscreenMode();
+        }, { once: true });
 
         window.addEventListener('beforeunload', () => {
             stopCamera();
@@ -1070,6 +1099,10 @@
             async encodeAudioBuffer(durationSec) {
                 const audioBuffer = this.options.audioBuffer || null;
                 if (!audioBuffer) return 0;
+                if (!audioBuffer.length) {
+                    setAudioStatus('Music buffer is empty');
+                    return 0;
+                }
                 if (!('AudioEncoder' in window)) {
                     setAudioStatus('No AudioEncoder: music not saved');
                     return 0;
@@ -1101,10 +1134,7 @@
                 });
                 encoder.configure(finalConfig);
 
-                const totalFrames = Math.min(
-                    audioBuffer.length,
-                    Math.max(1, Math.floor(durationSec * sampleRate))
-                );
+                const totalFrames = Math.max(1, Math.floor(durationSec * sampleRate));
                 const chunkFrames = 1024;
                 const channelData = [];
                 for (let ch = 0; ch < channels; ch++) {
@@ -1116,7 +1146,8 @@
                     const data = new Float32Array(frames * channels);
                     for (let i = 0; i < frames; i++) {
                         for (let ch = 0; ch < channels; ch++) {
-                            data[i * channels + ch] = channelData[ch][offset + i] || 0;
+                            const sourceFrame = (offset + i) % audioBuffer.length;
+                            data[i * channels + ch] = channelData[ch][sourceFrame] || 0;
                         }
                     }
                     const audioData = new AudioData({

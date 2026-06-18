@@ -1,0 +1,10 @@
+{
+  "name": "KANDO 360 Booth",
+  "short_name": "360 Booth",
+  "start_url": "./360.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "orientation": "portrait"
+}
