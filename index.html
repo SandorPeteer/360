@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.27</title>
+    <title>360 HW Record Minimal v1.28</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.27</span><br>
+                    Build: <span>v1.28</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -932,13 +932,13 @@
                     reader.onerror = rej;
                     reader.readAsDataURL(blob);
                 });
-                const resp = await fetch(webhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filename, data: base64, mimeType: 'video/mp4' })
-                });
-                const text = await resp.text();
-                logMsg('Drive: ' + (resp.ok ? 'OK ' + text : 'HIBA ' + resp.status));
+                // Apps Script redirects → CORS blocks JSON response. Use no-cors + form POST workaround.
+                const form = new FormData();
+                form.append('filename', filename);
+                form.append('data', base64);
+                form.append('mimeType', 'video/mp4');
+                await fetch(webhookUrl, { method: 'POST', mode: 'no-cors', body: form });
+                logMsg('Drive: feltöltve (no-cors)');
             } catch (e) {
                 logMsg('Drive hiba: ' + e.message);
             } finally {
