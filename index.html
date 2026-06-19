@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.20</title>
+    <title>360 HW Record Minimal v1.21</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.20</span><br>
+                    Build: <span>v1.21</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1278,93 +1278,90 @@
         initBooth();
 
         async function remuxWithAudio(videoBlob, audioRawBuffer, videoFrameCount, fps) {
-            // Uses mp4box.js to append the AAC audio track from the m4a into the video-only MP4.
-            // No re-encoding: the original compressed AAC stream is copied as-is.
+            // Parse video MP4 and audio m4a with mp4box, then copy samples into a new MP4.
             const videoBuf = await videoBlob.arrayBuffer();
-            const audioBuf = audioRawBuffer.slice(0); // clone so mp4box can mutate
+            // audioRawBuffer may be detached if decodeAudioData consumed it — use the stored copy
+            const audioBuf = audioRawBuffer instanceof ArrayBuffer && audioRawBuffer.byteLength > 0
+                ? audioRawBuffer : null;
+            if (!audioBuf) { console.warn('[remux] audio buffer missing or detached'); return videoBlob; }
 
-            return new Promise((resolve, reject) => {
-                const videoFile = MP4Box.createFile();
-                const audioFile = MP4Box.createFile();
-                let videoReady = false, audioReady = false;
-                let videoInfo = null, audioInfo = null;
-
-                function tryMux() {
-                    if (!videoReady || !audioReady) return;
-                    try {
-                        const out = MP4Box.createFile();
-                        // Copy video track
-                        const vTrack = videoInfo.tracks[0];
-                        const vId = out.addTrack({
-                            type: 'avc1',
-                            width: vTrack.video ? vTrack.video.width : 720,
-                            height: vTrack.video ? vTrack.video.height : 1280,
-                            timescale: vTrack.timescale,
-                            duration: vTrack.duration,
-                            avcDecoderConfigRecord: videoFile.getTrackById(vTrack.id).mdia.minf.stbl.stsd.entries[0].avcC
-                        });
-                        // Copy audio track from m4a
-                        const aTrack = audioInfo.tracks.find(t => t.type === 'audio' || t.audio) || audioInfo.tracks[0];
-                        const aEntry = audioFile.getTrackById(aTrack.id).mdia.minf.stbl.stsd.entries[0];
-                        const aId = out.addTrack({
-                            type: 'mp4a',
-                            timescale: aTrack.timescale,
-                            samplerate: aTrack.audio ? aTrack.audio.sample_rate : 44100,
-                            channel_count: aTrack.audio ? aTrack.audio.channel_count : 2,
-                            hdlr: 'soun',
-                            esds: aEntry.esds
-                        });
-
-                        // Copy video samples
-                        videoFile.setExtractionOptions(vTrack.id, null, { nbSamples: Infinity });
-                        videoFile.start();
-                        videoFile.onSamples = (id, user, samples) => {
-                            samples.forEach(s => {
-                                out.addSample(vId, s.data, {
-                                    duration: s.duration, cts: s.cts, dts: s.dts,
-                                    is_sync: s.is_sync
-                                });
-                            });
-                        };
-
-                        // Copy audio samples, trimmed to video duration
-                        const videoDurSec = videoFrameCount / fps;
-                        const maxAudioSamples = Math.ceil(videoDurSec * aTrack.timescale);
-                        let audioSampleCount = 0;
-                        audioFile.setExtractionOptions(aTrack.id, null, { nbSamples: Infinity });
-                        audioFile.start();
-                        audioFile.onSamples = (id, user, samples) => {
-                            samples.forEach(s => {
-                                if (audioSampleCount >= maxAudioSamples) return;
-                                out.addSample(aId, s.data, {
-                                    duration: s.duration, cts: s.cts, dts: s.dts,
-                                    is_sync: s.is_sync
-                                });
-                                audioSampleCount += s.duration;
-                            });
-                        };
-
-                        const outBuf = out.getBuffer();
-                        resolve(new Blob([outBuf], { type: 'video/mp4' }));
-                    } catch (e) {
-                        console.error('[remux] failed:', e);
-                        // Fall back to video-only
-                        resolve(videoBlob);
-                    }
-                }
-
-                videoFile.onReady = (info) => { videoInfo = info; videoReady = true; tryMux(); };
-                videoFile.onError = (e) => { console.error('[remux] video parse error:', e); resolve(videoBlob); };
-                audioFile.onReady = (info) => { audioInfo = info; audioReady = true; tryMux(); };
-                audioFile.onError = (e) => { console.error('[remux] audio parse error:', e); resolve(videoBlob); };
-
-                videoBuf.fileStart = 0;
-                audioBuf.fileStart = 0;
-                videoFile.appendBuffer(videoBuf);
-                videoFile.flush();
-                audioFile.appendBuffer(audioBuf);
-                audioFile.flush();
+            const parseFile = (buf) => new Promise((resolve, reject) => {
+                const f = MP4Box.createFile();
+                f.onReady = (info) => resolve({ file: f, info });
+                f.onError = (e) => reject(new Error('mp4box parse error: ' + e));
+                const ab = buf.slice(0); // always clone before giving to mp4box
+                ab.fileStart = 0;
+                f.appendBuffer(ab);
+                f.flush();
             });
+
+            let vParsed, aParsed;
+            try {
+                [vParsed, aParsed] = await Promise.all([parseFile(videoBuf), parseFile(audioBuf)]);
+            } catch (e) {
+                console.error('[remux] parse failed:', e);
+                return videoBlob;
+            }
+
+            const { file: vFile, info: vInfo } = vParsed;
+            const { file: aFile, info: aInfo } = aParsed;
+            const vTrack = vInfo.tracks[0];
+            const aTrack = aInfo.tracks.find(t => t.type === 'audio' || (t.audio && t.audio.sample_rate)) || aInfo.tracks[0];
+
+            if (!vTrack || !aTrack) { console.error('[remux] missing track'); return videoBlob; }
+
+            const out = MP4Box.createFile();
+
+            // Add video track
+            const vId = out.addTrack({
+                type: 'avc1',
+                width: (vTrack.video && vTrack.video.width) || 720,
+                height: (vTrack.video && vTrack.video.height) || 1280,
+                timescale: vTrack.timescale,
+            });
+            // Add audio track
+            const aId = out.addTrack({
+                type: 'mp4a',
+                timescale: aTrack.timescale,
+                samplerate: (aTrack.audio && aTrack.audio.sample_rate) || 44100,
+                channel_count: (aTrack.audio && aTrack.audio.channel_count) || 2,
+            });
+
+            // Extract + copy video samples
+            const vSamples = await new Promise(res => {
+                const all = [];
+                vFile.setExtractionOptions(vTrack.id, null, { nbSamples: Infinity });
+                vFile.onSamples = (id, user, samples) => all.push(...samples);
+                vFile.start();
+                setTimeout(() => res(all), 100);
+            });
+            vSamples.forEach(s => out.addSample(vId, s.data, { duration: s.duration, cts: s.cts, dts: s.dts, is_sync: s.is_sync }));
+
+            // Extract + copy audio samples (trimmed to video length)
+            const videoDurTicks = Math.round((videoFrameCount / fps) * aTrack.timescale);
+            const aSamples = await new Promise(res => {
+                const all = [];
+                aFile.setExtractionOptions(aTrack.id, null, { nbSamples: Infinity });
+                aFile.onSamples = (id, user, samples) => all.push(...samples);
+                aFile.start();
+                setTimeout(() => res(all), 100);
+            });
+            let accDts = 0;
+            aSamples.forEach(s => {
+                if (accDts >= videoDurTicks) return;
+                out.addSample(aId, s.data, { duration: s.duration, cts: s.cts, dts: s.dts, is_sync: s.is_sync });
+                accDts += s.duration;
+            });
+
+            try {
+                const outBuf = out.getBuffer();
+                console.log('[remux] done, size=', outBuf.byteLength, 'vSamples=', vSamples.length, 'aSamples=', aSamples.length);
+                setAudioStatus(`Hang bemuxolva (${aSamples.length} sample)`);
+                return new Blob([outBuf], { type: 'video/mp4' });
+            } catch (e) {
+                console.error('[remux] getBuffer failed:', e);
+                return videoBlob;
+            }
         }
 
         function buildInterleavedAudioData(audioData) {
