@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.30</title>
+    <title>360 HW Record Minimal v1.31</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.30</span><br>
+                    Build: <span>v1.31</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -932,13 +932,16 @@
                     reader.onerror = rej;
                     reader.readAsDataURL(blob);
                 });
-                const resp = await fetch(webhookUrl, {
+                // Simple request (no preflight): urlencoded POST with no-cors
+                // Apps Script receives it via e.parameters even with no-cors redirect
+                const body = new URLSearchParams({ filename, data: base64, mimeType: 'video/mp4' });
+                await fetch(webhookUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({ filename, data: base64, mimeType: 'video/mp4' })
+                    mode: 'no-cors',
+                    redirect: 'follow',
+                    body: body
                 });
-                const text = await resp.text().catch(() => '?');
-                logMsg('Drive: ' + (resp.ok ? 'OK ' + text : 'HIBA ' + resp.status));
+                logMsg('Drive: elküldve!');
             } catch (e) {
                 logMsg('Drive hiba: ' + e.message);
             } finally {
