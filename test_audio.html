@@ -1,74 +1,52 @@
 <!DOCTYPE html>
 <html>
-<head><title>AudioEncoder test</title></head>
+<head><title>Codec support test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font-family:monospace;padding:12px;font-size:13px;}</style>
+</head>
 <body>
-<button id="btn">Test AudioEncoder</button>
-<pre id="log"></pre>
+<pre id="log">Testing...</pre>
 <script>
-const log = (s) => { document.getElementById('log').textContent += s + '\n'; console.log(s); };
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; }
 
-document.getElementById('btn').addEventListener('click', async () => {
-  if (!('AudioEncoder' in window)) { log('NO AudioEncoder'); return; }
-  
-  // Create a 1-second sine wave at 440Hz
-  const sampleRate = 44100;
-  const numChannels = 2;
-  const numFrames = sampleRate; // 1 second
-  
-  const config = { codec: 'mp4a.40.2', sampleRate, numberOfChannels: numChannels, bitrate: 128000 };
-  const sup = await AudioEncoder.isConfigSupported(config);
-  log('isConfigSupported: ' + JSON.stringify(sup));
-  if (!sup.supported) { log('NOT SUPPORTED'); return; }
-  
-  const finalConfig = sup.config || config;
-  log('finalConfig: ' + JSON.stringify(finalConfig));
-  
-  const chunks = [];
-  const enc = new AudioEncoder({
-    output: (chunk, meta) => { 
-      chunks.push({chunk, meta}); 
-      log('chunk: ts=' + chunk.timestamp + ' size=' + chunk.byteLength + ' meta=' + JSON.stringify(meta));
-    },
-    error: (e) => log('ERROR: ' + e)
-  });
-  enc.configure(finalConfig);
-  
-  // Feed 4096-frame chunks of f32-planar silence
-  const CHUNK = 4096;
-  for (let offset = 0; offset < numFrames; offset += CHUNK) {
-    const frames = Math.min(CHUNK, numFrames - offset);
-    const pcm = new Float32Array(frames * numChannels); // silence = zeros, f32-planar
-    // f32-planar: ch0 block then ch1 block
-    const tsUs = Math.round(offset * 1_000_000 / sampleRate);
-    const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: frames, numberOfChannels: numChannels, timestamp: tsUs, data: pcm });
-    enc.encode(ad);
-    ad.close();
-  }
-  await enc.flush();
-  log('DONE: ' + chunks.length + ' chunks, total bytes: ' + chunks.reduce((a,c) => a + c.chunk.byteLength, 0));
-  
-  // Now try muxing with mp4-muxer
-  if (typeof Mp4Muxer === 'undefined') { log('No Mp4Muxer'); return; }
-  const muxer = new Mp4Muxer.Muxer({
-    target: new Mp4Muxer.ArrayBufferTarget(),
-    audio: { codec: 'aac', numberOfChannels: finalConfig.numberOfChannels, sampleRate: finalConfig.sampleRate },
-    fastStart: 'in-memory',
-    firstTimestampBehavior: 'offset'
-  });
-  for (const {chunk, meta} of chunks) {
-    try { muxer.addAudioChunk(chunk, meta); } catch(e) { log('addAudioChunk error: ' + e); }
-  }
-  muxer.finalize();
-  const buf = muxer.target.buffer;
-  log('Muxed buffer size: ' + buf.byteLength);
-  
-  const blob = new Blob([buf], {type: 'audio/mp4'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'test_audio.m4a'; a.textContent = 'Download test audio';
-  document.body.appendChild(a);
+const mimes = [
+  'video/mp4;codecs=avc1.64002A,mp4a.40.2',
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4;codecs=avc1.42E01E',
+  'video/mp4',
+  'video/webm;codecs=vp9,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
+log('=== MediaRecorder MIME support ===');
+mimes.forEach(m => {
+  try { log((MediaRecorder.isTypeSupported(m) ? 'OK  ' : 'NO  ') + m); }
+  catch(e) { log('ERR ' + m); }
 });
+
+log('\n=== AudioEncoder ===');
+if (!('AudioEncoder' in window)) {
+  log('AudioEncoder: NOT available');
+} else {
+  log('AudioEncoder: available');
+  const cfgs = [
+    { codec: 'mp4a.40.2', sampleRate: 44100, numberOfChannels: 2, bitrate: 128000 },
+    { codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 },
+    { codec: 'mp4a.40.2', sampleRate: 44100, numberOfChannels: 1, bitrate: 128000 },
+    { codec: 'mp4a.40.5', sampleRate: 44100, numberOfChannels: 2, bitrate: 128000 },
+  ];
+  (async () => {
+    for (const cfg of cfgs) {
+      try {
+        const sup = await AudioEncoder.isConfigSupported(cfg);
+        const res = sup.config || {};
+        log((sup.supported?'OK':'NO') + ' sr=' + cfg.sampleRate + ' ch=' + cfg.numberOfChannels
+          + ' codec=' + cfg.codec + ' → resolved ch=' + res.numberOfChannels + ' sr=' + res.sampleRate);
+      } catch(e) { log('ERR: ' + e); }
+    }
+    log('\nDone.');
+  })();
+}
 </script>
-<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"></script>
 </body>
 </html>
