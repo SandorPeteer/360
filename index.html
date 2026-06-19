@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.18</title>
+    <title>360 HW Record Minimal v1.19</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.18</span><br>
+                    Build: <span>v1.19</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1024,11 +1024,25 @@
 
                 const ab = this.audioFileBuffer;
                 const hasAudioEnc = 'AudioEncoder' in window;
-                const audioInfo = (ab && hasAudioEnc) ? {
-                    codec: 'aac',
-                    numberOfChannels: ab.numberOfChannels,
-                    sampleRate: ab.sampleRate
-                } : null;
+
+                // Resolve exact AudioEncoder config BEFORE creating the muxer so sampleRate/channels match
+                let audioInfo = null;
+                let resolvedAudioConfig = null;
+                if (ab && hasAudioEnc) {
+                    const wantedConfig = { codec: 'mp4a.40.2', numberOfChannels: ab.numberOfChannels, sampleRate: ab.sampleRate, bitrate: 192000 };
+                    try {
+                        const sup = await AudioEncoder.isConfigSupported(wantedConfig);
+                        resolvedAudioConfig = (sup && sup.supported) ? (sup.config || wantedConfig) : wantedConfig;
+                    } catch (_) { resolvedAudioConfig = wantedConfig; }
+                    audioInfo = {
+                        codec: 'aac',
+                        numberOfChannels: resolvedAudioConfig.numberOfChannels,
+                        sampleRate: resolvedAudioConfig.sampleRate
+                    };
+                    console.log('[AudioEnc] resolved config:', JSON.stringify(resolvedAudioConfig));
+                    console.log('[AudioEnc] muxer audioInfo:', JSON.stringify(audioInfo));
+                }
+                this._resolvedAudioConfig = resolvedAudioConfig;
 
                 this.muxer = new Mp4Muxer.Muxer({
                     target: new Mp4Muxer.ArrayBufferTarget(),
@@ -1078,18 +1092,11 @@
 
             async _startLiveAudio(audioInfo) {
                 const ab = this.audioFileBuffer;
-                const sampleRate = ab.sampleRate;
-                const numberOfChannels = ab.numberOfChannels;
                 const CHUNK_FRAMES = 4096;
-
-                const config = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, bitrate: 192000 };
-                let finalConfig = config;
-                try {
-                    const sup = await AudioEncoder.isConfigSupported(config);
-                    console.log('[AudioEnc] isConfigSupported:', JSON.stringify(sup));
-                    if (sup && sup.supported) finalConfig = sup.config || config;
-                    else { console.error('[AudioEnc] config NOT supported!', config); return; }
-                } catch (e) { console.error('[AudioEnc] isConfigSupported threw:', e); return; }
+                const finalConfig = this._resolvedAudioConfig;
+                if (!finalConfig) { console.error('[AudioEnc] no resolved config'); return; }
+                const sampleRate = finalConfig.sampleRate;
+                const numberOfChannels = finalConfig.numberOfChannels;
 
                 this._audioChunkCount = 0;
                 this.audioEncoder = new AudioEncoder({
@@ -1107,11 +1114,13 @@
                 console.log('[AudioEnc] configured:', JSON.stringify(finalConfig));
 
                 const channels = [];
-                for (let ch = 0; ch < numberOfChannels; ch++) {
+                // Use ab.numberOfChannels for actual PCM data — encoder config may differ
+                for (let ch = 0; ch < ab.numberOfChannels; ch++) {
                     channels.push(ab.getChannelData(ch));
                 }
                 this._audioChannels = channels;
-                this._audioSampleRate = sampleRate;
+                this._audioSampleRate = ab.sampleRate;   // PCM is at source sampleRate
+                this._audioEncChannels = numberOfChannels; // encoder expects this many channels
                 this._audioChunkFrames = CHUNK_FRAMES;
                 this._audioTotalFrames = ab.length;
 
@@ -1124,14 +1133,16 @@
             _feedAudioChunk() {
                 if (!this.isRecording || !this.audioEncoder || this.audioEncoder.state !== 'configured') return;
                 const { _audioChannels: channels, _audioSampleRate: sampleRate,
-                        _audioChunkFrames: CHUNK_FRAMES, _audioTotalFrames: total } = this;
+                        _audioChunkFrames: CHUNK_FRAMES, _audioTotalFrames: total,
+                        _audioEncChannels: encCh } = this;
+                const nCh = Math.min(channels.length, encCh || channels.length);
                 const offset = this._audioOffset % total;
                 const frames = Math.min(CHUNK_FRAMES, total - offset);
                 const timestampUs = Math.round(this._audioOffset * 1_000_000 / sampleRate);
 
                 // f32-planar: ch0[0..frames], ch1[0..frames], ...
-                const pcm = new Float32Array(frames * channels.length);
-                for (let ch = 0; ch < channels.length; ch++) {
+                const pcm = new Float32Array(frames * nCh);
+                for (let ch = 0; ch < nCh; ch++) {
                     pcm.set(channels[ch].subarray(offset, offset + frames), ch * frames);
                 }
                 try {
@@ -1139,7 +1150,7 @@
                         format: 'f32-planar',
                         sampleRate,
                         numberOfFrames: frames,
-                        numberOfChannels: channels.length,
+                        numberOfChannels: nCh,
                         timestamp: timestampUs,
                         data: pcm
                     });
