@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.23</title>
+    <title>360 HW Record Minimal v1.24</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.23</span><br>
+                    Build: <span>v1.24</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -356,22 +356,35 @@
             }
         }
 
-        // Single unified RAF loop: draws to canvas AND captures frame for encoding if recording
-        // This ensures capture always sees a freshly drawn canvas with no race condition
-        let captureCallback = null; // set by WebCodecsRecorder during recording
+        let captureCallback = null;
 
         function startDrawLoop() {
             stopDrawLoop();
-            const loop = (ts) => {
-                drawFrame();
-                if (captureCallback) captureCallback(ts);
+            if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+                // requestVideoFrameCallback: draw exactly once per new camera frame — zero wasted draws
+                const onFrame = (now, meta) => {
+                    if (!drawRaf) return; // stopped
+                    drawFrame();
+                    if (captureCallback) captureCallback(now);
+                    drawRaf = liveVideo.requestVideoFrameCallback(onFrame);
+                };
+                drawRaf = liveVideo.requestVideoFrameCallback(onFrame);
+            } else {
+                // Fallback: RAF loop
+                const loop = (ts) => {
+                    drawFrame();
+                    if (captureCallback) captureCallback(ts);
+                    drawRaf = requestAnimationFrame(loop);
+                };
                 drawRaf = requestAnimationFrame(loop);
-            };
-            drawRaf = requestAnimationFrame(loop);
+            }
         }
 
         function stopDrawLoop() {
             if (drawRaf) {
+                if ('cancelVideoFrameCallback' in HTMLVideoElement.prototype) {
+                    try { liveVideo.cancelVideoFrameCallback(drawRaf); } catch (_) {}
+                }
                 cancelAnimationFrame(drawRaf);
                 drawRaf = 0;
             }
