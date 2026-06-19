@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.19</title>
+    <title>360 HW Record Minimal v1.20</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.19</span><br>
+                    Build: <span>v1.20</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -138,6 +138,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"
         onerror="this.onerror=null;this.src='https://unpkg.com/mp4-muxer@5.2.2/build/mp4-muxer.js'"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"
+        onerror="this.onerror=null;this.src='https://unpkg.com/mp4box@0.5.2/dist/mp4box.all.min.js'"></script>
     <script>
         const preview = document.getElementById('preview');
         const canvas = preview;
@@ -200,7 +202,8 @@
         let recBytes = 0;
         let recStatsTimer = 0;
         let previewFps = 30;
-        let audioFileBuffer = null;
+        let audioFileBuffer = null;    // decoded PCM AudioBuffer (for monitor playback)
+        let audioFileRawBuffer = null; // original binary ArrayBuffer (for muxing)
         let audioFileName = '';
         let recordAudioCtx = null;
         let recordAudioSources = [];
@@ -402,8 +405,9 @@
         });
 
         async function decodeAudioArrayBuffer(arrayBuffer, label) {
+            audioFileRawBuffer = arrayBuffer; // keep original for muxing
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            audioFileBuffer = await ctx.decodeAudioData(arrayBuffer);
+            audioFileBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0)); // slice: decodeAudioData consumes the buffer
             audioFileName = label;
             await ctx.close();
             setAudioStatus(`Loaded: ${audioFileName}`);
@@ -412,6 +416,7 @@
 
         async function loadDefaultAudio() {
             audioFileBuffer = null;
+            audioFileRawBuffer = null;
             audioFileName = '';
             try {
                 const res = await fetch(`${DEFAULT_AUDIO_URL}?v=${Date.now()}`, { cache: 'no-store' });
@@ -691,7 +696,7 @@
             }
             setAudioStatus(audioFileBuffer ? 'Felvétel közben zene szól, utána bemuxolás...' : 'Nincs zenefájl');
 
-            recorder = new WebCodecsRecorder(track, audioFileBuffer, {
+            recorder = new WebCodecsRecorder(track, {
                 width: canvas.width,
                 height: canvas.height,
                 framerate: fps,
@@ -745,9 +750,16 @@
                 stopAudioMix();
             } else if (recorder) {
                 try {
-                    logMsg('Feldolgozás...');
-                    const blob = await recorder.stop();
-                    handleRecordingComplete(blob, 'mp4');
+                    logMsg('Videó lezárása...');
+                    const videoBlob = await recorder.stop();
+                    if (audioFileRawBuffer && typeof MP4Box !== 'undefined') {
+                        logMsg('Hang hozzáadása...');
+                        if (processingText) processingText.textContent = '🎵 Hang hozzáadása...';
+                        const finalBlob = await remuxWithAudio(videoBlob, audioFileRawBuffer, recorder.frameCounter, recorder.framerate);
+                        handleRecordingComplete(finalBlob, 'mp4');
+                    } else {
+                        handleRecordingComplete(videoBlob, 'mp4');
+                    }
                 } catch (e) {
                     console.error(e);
                     logMsg(`Hiba: ${e && e.message ? e.message : 'unknown error'}`);
@@ -984,12 +996,10 @@
         }
 
         class WebCodecsRecorder {
-            constructor(videoTrack, audioFileBuffer, options = {}) {
+            constructor(videoTrack, options = {}) {
                 this.videoTrack = videoTrack;
-                this.audioFileBuffer = audioFileBuffer;
                 this.options = options;
                 this.encoder = null;
-                this.audioEncoder = null;
                 this.muxer = null;
                 this.reader = null;
                 this.frameCounter = 0;
@@ -1001,9 +1011,6 @@
                 this.framerate = options.framerate || 30;
                 this.width = options.width || 720;
                 this.height = options.height || 1280;
-                // Audio live feed state
-                this._audioOffset = 0;       // samples already sent to AudioEncoder
-                this._audioLoopId = null;
             }
 
             async start() {
@@ -1022,32 +1029,9 @@
                 this.width = width;
                 this.height = height;
 
-                const ab = this.audioFileBuffer;
-                const hasAudioEnc = 'AudioEncoder' in window;
-
-                // Resolve exact AudioEncoder config BEFORE creating the muxer so sampleRate/channels match
-                let audioInfo = null;
-                let resolvedAudioConfig = null;
-                if (ab && hasAudioEnc) {
-                    const wantedConfig = { codec: 'mp4a.40.2', numberOfChannels: ab.numberOfChannels, sampleRate: ab.sampleRate, bitrate: 192000 };
-                    try {
-                        const sup = await AudioEncoder.isConfigSupported(wantedConfig);
-                        resolvedAudioConfig = (sup && sup.supported) ? (sup.config || wantedConfig) : wantedConfig;
-                    } catch (_) { resolvedAudioConfig = wantedConfig; }
-                    audioInfo = {
-                        codec: 'aac',
-                        numberOfChannels: resolvedAudioConfig.numberOfChannels,
-                        sampleRate: resolvedAudioConfig.sampleRate
-                    };
-                    console.log('[AudioEnc] resolved config:', JSON.stringify(resolvedAudioConfig));
-                    console.log('[AudioEnc] muxer audioInfo:', JSON.stringify(audioInfo));
-                }
-                this._resolvedAudioConfig = resolvedAudioConfig;
-
                 this.muxer = new Mp4Muxer.Muxer({
                     target: new Mp4Muxer.ArrayBufferTarget(),
                     video: { codec: 'avc', width, height },
-                    ...(audioInfo ? { audio: audioInfo } : {}),
                     fastStart: 'in-memory',
                     firstTimestampBehavior: 'offset'
                 });
@@ -1070,10 +1054,6 @@
                     error: (e) => console.error('[WebCodecs] Video encode error:', e)
                 });
                 this.encoder.configure(this.chosenConfig);
-
-                if (audioInfo) {
-                    await this._startLiveAudio(audioInfo);
-                }
 
                 if (typeof MediaStreamTrackProcessor !== 'undefined' && this.sourceCanvas) {
                     const canvasTrack = this.sourceCanvas.captureStream(framerate).getVideoTracks()[0];
@@ -1258,11 +1238,6 @@
             async stop() {
                 this.isRecording = false;
                 captureCallback = null;
-
-                if (this._audioLoopId) {
-                    clearInterval(this._audioLoopId);
-                    this._audioLoopId = null;
-                }
                 if (this.canvasCaptureTrack) {
                     try { this.canvasCaptureTrack.stop(); } catch (_) {}
                     this.canvasCaptureTrack = null;
@@ -1270,12 +1245,6 @@
                 if (this.reader) {
                     try { await this.reader.cancel(); } catch (_) {}
                     this.reader = null;
-                }
-                if (this.audioEncoder && this.audioEncoder.state === 'configured') {
-                    try { await this.audioEncoder.flush(); this.audioEncoder.close(); } catch (e) {
-                        console.warn('[WebCodecs] Audio flush error:', e);
-                    }
-                    this.audioEncoder = null;
                 }
                 if (this.encoder && this.encoder.state === 'configured') {
                     try { await this.encoder.flush(); this.encoder.close(); } catch (e) {
@@ -1285,9 +1254,7 @@
                 if (this.muxer) {
                     this.muxer.finalize();
                     const { buffer } = this.muxer.target;
-                    const ac = this._audioChunkCount || 0;
-                    console.log('[WebCodecs] stop: audioChunks=', ac, 'videoFrames=', this.frameCounter, 'bufSize=', buffer.byteLength);
-                    setAudioStatus(ac > 0 ? `Hang bemuxolva (${ac} chunk)` : (this.audioFileBuffer ? 'HIBA: 0 audio chunk!' : 'Nincs zenefájl'));
+                    console.log('[WebCodecs] stop: videoFrames=', this.frameCounter, 'bufSize=', buffer.byteLength);
                     return new Blob([buffer], { type: 'video/mp4' });
                 }
                 return new Blob([], { type: 'video/mp4' });
@@ -1309,6 +1276,96 @@
             ]);
         }
         initBooth();
+
+        async function remuxWithAudio(videoBlob, audioRawBuffer, videoFrameCount, fps) {
+            // Uses mp4box.js to append the AAC audio track from the m4a into the video-only MP4.
+            // No re-encoding: the original compressed AAC stream is copied as-is.
+            const videoBuf = await videoBlob.arrayBuffer();
+            const audioBuf = audioRawBuffer.slice(0); // clone so mp4box can mutate
+
+            return new Promise((resolve, reject) => {
+                const videoFile = MP4Box.createFile();
+                const audioFile = MP4Box.createFile();
+                let videoReady = false, audioReady = false;
+                let videoInfo = null, audioInfo = null;
+
+                function tryMux() {
+                    if (!videoReady || !audioReady) return;
+                    try {
+                        const out = MP4Box.createFile();
+                        // Copy video track
+                        const vTrack = videoInfo.tracks[0];
+                        const vId = out.addTrack({
+                            type: 'avc1',
+                            width: vTrack.video ? vTrack.video.width : 720,
+                            height: vTrack.video ? vTrack.video.height : 1280,
+                            timescale: vTrack.timescale,
+                            duration: vTrack.duration,
+                            avcDecoderConfigRecord: videoFile.getTrackById(vTrack.id).mdia.minf.stbl.stsd.entries[0].avcC
+                        });
+                        // Copy audio track from m4a
+                        const aTrack = audioInfo.tracks.find(t => t.type === 'audio' || t.audio) || audioInfo.tracks[0];
+                        const aEntry = audioFile.getTrackById(aTrack.id).mdia.minf.stbl.stsd.entries[0];
+                        const aId = out.addTrack({
+                            type: 'mp4a',
+                            timescale: aTrack.timescale,
+                            samplerate: aTrack.audio ? aTrack.audio.sample_rate : 44100,
+                            channel_count: aTrack.audio ? aTrack.audio.channel_count : 2,
+                            hdlr: 'soun',
+                            esds: aEntry.esds
+                        });
+
+                        // Copy video samples
+                        videoFile.setExtractionOptions(vTrack.id, null, { nbSamples: Infinity });
+                        videoFile.start();
+                        videoFile.onSamples = (id, user, samples) => {
+                            samples.forEach(s => {
+                                out.addSample(vId, s.data, {
+                                    duration: s.duration, cts: s.cts, dts: s.dts,
+                                    is_sync: s.is_sync
+                                });
+                            });
+                        };
+
+                        // Copy audio samples, trimmed to video duration
+                        const videoDurSec = videoFrameCount / fps;
+                        const maxAudioSamples = Math.ceil(videoDurSec * aTrack.timescale);
+                        let audioSampleCount = 0;
+                        audioFile.setExtractionOptions(aTrack.id, null, { nbSamples: Infinity });
+                        audioFile.start();
+                        audioFile.onSamples = (id, user, samples) => {
+                            samples.forEach(s => {
+                                if (audioSampleCount >= maxAudioSamples) return;
+                                out.addSample(aId, s.data, {
+                                    duration: s.duration, cts: s.cts, dts: s.dts,
+                                    is_sync: s.is_sync
+                                });
+                                audioSampleCount += s.duration;
+                            });
+                        };
+
+                        const outBuf = out.getBuffer();
+                        resolve(new Blob([outBuf], { type: 'video/mp4' }));
+                    } catch (e) {
+                        console.error('[remux] failed:', e);
+                        // Fall back to video-only
+                        resolve(videoBlob);
+                    }
+                }
+
+                videoFile.onReady = (info) => { videoInfo = info; videoReady = true; tryMux(); };
+                videoFile.onError = (e) => { console.error('[remux] video parse error:', e); resolve(videoBlob); };
+                audioFile.onReady = (info) => { audioInfo = info; audioReady = true; tryMux(); };
+                audioFile.onError = (e) => { console.error('[remux] audio parse error:', e); resolve(videoBlob); };
+
+                videoBuf.fileStart = 0;
+                audioBuf.fileStart = 0;
+                videoFile.appendBuffer(videoBuf);
+                videoFile.flush();
+                audioFile.appendBuffer(audioBuf);
+                audioFile.flush();
+            });
+        }
 
         function buildInterleavedAudioData(audioData) {
             const format = audioData.format;
