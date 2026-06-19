@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.33</title>
+    <title>360 HW Record Minimal v1.34</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.33</span><br>
+                    Build: <span>v1.34</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -933,16 +933,12 @@
                     reader.onerror = rej;
                     reader.readAsDataURL(blob);
                 });
-                // Send raw binary blob — no base64 overhead, Apps Script reads as byte array
-                logMsg(`Drive 3/3: küldés... (${(blob.size/1024/1024).toFixed(1)} MB bináris)`);
-                const url = webhookUrl + '?filename=' + encodeURIComponent(filename);
-                const resp = await fetch(url, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'video/mp4' },
-                    body: blob
-                });
-                logMsg(`Drive: kész! (type: ${resp.type})`);
+                logMsg(`Drive 3/3: küldés... (${(base64.length/1024/1024).toFixed(1)} MB base64) — kérlek várj!`);
+                const body = new URLSearchParams({ filename, data: base64, mimeType: 'video/mp4' });
+                fetch(webhookUrl, { method: 'POST', mode: 'no-cors', body })
+                    .then(() => logMsg('Drive: szerver megkapta!'))
+                    .catch(err => logMsg('Drive hiba: ' + err.message));
+                logMsg('Drive: feltöltés folyamatban, 1-2 perc múlva megjelenik a mappában...');
             } catch (e) {
                 logMsg('Drive HIBA: ' + e.message + ' | ' + e.name);
                 console.error('Drive upload error', e);
