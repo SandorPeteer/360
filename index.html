@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.24</title>
+    <title>360 HW Record Minimal v1.25</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.24</span><br>
+                    Build: <span>v1.25</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -626,9 +626,18 @@
                 await recordAudioCtx.resume().catch(() => {});
             }
 
-            const canvasStream = canvas.captureStream(fps);
+            // captureStream(0): frame-driven mode — only captures when we call requestFrame()
+            // This avoids the internal timer racing against requestVideoFrameCallback
+            const canvasStream = canvas.captureStream(0);
+            const videoTrack = canvasStream.getVideoTracks()[0];
             if (musicTrack) canvasStream.addTrack(musicTrack);
             activeCanvasStream = canvasStream;
+
+            // Wire requestVideoFrameCallback to explicitly push each new frame into captureStream
+            const origOnFrame = null;
+            captureCallback = () => {
+                if (videoTrack && videoTrack.requestFrame) videoTrack.requestFrame();
+            };
 
             const { mime, ext } = pickMediaRecorderMime();
             let mr;
@@ -644,12 +653,13 @@
             mediaRecorderChunks = [];
             mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) mediaRecorderChunks.push(e.data); };
             mr.onstop = () => {
+                captureCallback = null;
                 const blob = new Blob(mediaRecorderChunks, { type: mime });
                 handleRecordingComplete(blob, ext);
                 mediaRecorderChunks = [];
             };
             startAudioMixPlayback();
-            mr.start(33);
+            mr.start(16);
             mediaRecorderFallback = mr;
             encoderStatus.textContent = `${mime.includes('avc1.64002A') ? 'HW H.264 High' : mime.includes('avc1') ? 'HW H.264' : 'SW'} ${canvas.width}x${canvas.height}@${fps}`;
             setAudioStatus(musicTrack ? 'Zene → stream (AAC 192k)' : 'Nincs zene');
