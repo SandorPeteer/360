@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.35</title>
+    <title>360 HW Record Minimal v1.36</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.35</span><br>
+                    Build: <span>v1.36</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -122,7 +122,7 @@
                 </div>
                 <div class="row">
                     <label for="bitrateInput">Avg bitrate (Mbps, 0 = auto)</label>
-                    <input id="bitrateInput" type="number" min="0" max="200" value="12">
+                    <input id="bitrateInput" type="number" min="0" max="200" value="8">
                 </div>
                 <div class="status">
                     <div id="log"></div>
@@ -700,7 +700,7 @@
             const bitrateValue = bitrateInput ? parseFloat(bitrateInput.value) : 0;
             const bitrate = (bitrateValue && bitrateValue > 0)
                 ? Math.round(bitrateValue * 1_000_000)
-                : Math.max(8_000_000, Math.round(canvas.width * canvas.height * fps * 0.07));
+                : Math.min(8_000_000, Math.round(canvas.width * canvas.height * fps * 0.04));
             if (statusFps) statusFps.textContent = String(Math.round(fps));
             if (statusBitrate) statusBitrate.textContent = `${(bitrate / 1_000_000).toFixed(1)} Mbps`;
             await waitForStablePreviewFrames(4);
