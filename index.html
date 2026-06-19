@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.15</title>
+    <title>360 HW Record Minimal v1.16</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.15</span><br>
+                    Build: <span>v1.16</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1170,11 +1170,8 @@
                     }
                 }
 
-                // Measure actual recorded duration from video chunks timestamps
-                if (this.videoChunks.length > 0) {
-                    const last = this.videoChunks[this.videoChunks.length - 1];
-                    this.recordedDurationUs = (last.chunk.timestamp || 0) + (last.chunk.duration || Math.round(1_000_000 / this.framerate));
-                }
+                // Duration = frameCounter * frameDurUs (monoton, EncodedVideoChunk.duration is always null)
+                this.recordedDurationUs = Math.round(this.frameCounter * (1_000_000 / this.framerate));
 
                 return await this._muxFinal();
             }
@@ -1223,16 +1220,17 @@
                 const sampleRate = audioBuffer.sampleRate;
                 const numberOfChannels = audioBuffer.numberOfChannels;
                 const durationSec = this.recordedDurationUs / 1_000_000;
-                // Only use as many audio samples as the video duration
                 const totalFrames = Math.min(audioBuffer.length, Math.ceil(durationSec * sampleRate));
                 const CHUNK_FRAMES = 4096;
-                const audioBitrate = this.options.audioBitsPerSecond || 128000;
+                const audioBitrate = this.options.audioBitsPerSecond || 192000;
 
-                const config = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, bitrate: audioBitrate };
-                let finalConfig = config;
+                // Try f32-planar first (Chrome), fall back to f32 (interleaved, some Safari)
+                let chosenFormat = 'f32-planar';
+                const baseConfig = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, bitrate: audioBitrate };
+                let finalConfig = baseConfig;
                 try {
-                    const sup = await AudioEncoder.isConfigSupported(config);
-                    if (sup && sup.supported) finalConfig = sup.config || config;
+                    const sup = await AudioEncoder.isConfigSupported(baseConfig);
+                    if (sup && sup.supported) finalConfig = sup.config || baseConfig;
                 } catch (_) {}
 
                 let audioChunkCount = 0;
@@ -1247,6 +1245,12 @@
                     });
                     enc.configure(finalConfig);
 
+                    // Pre-copy all channel data once (avoids repeated getChannelData calls in the loop)
+                    const channels = [];
+                    for (let ch = 0; ch < numberOfChannels; ch++) {
+                        channels.push(audioBuffer.getChannelData(ch));
+                    }
+
                     let offset = 0;
                     const encodeNext = () => {
                         if (offset >= totalFrames) {
@@ -1256,28 +1260,44 @@
                         const frames = Math.min(CHUNK_FRAMES, totalFrames - offset);
                         const timestampUs = Math.round(offset * 1_000_000 / sampleRate);
 
-                        // Build interleaved float32 PCM for this chunk
+                        // f32-planar: each channel is a contiguous block
                         const pcm = new Float32Array(frames * numberOfChannels);
                         for (let ch = 0; ch < numberOfChannels; ch++) {
-                            const channelData = audioBuffer.getChannelData(ch);
-                            for (let i = 0; i < frames; i++) {
-                                pcm[i * numberOfChannels + ch] = channelData[offset + i] || 0;
+                            pcm.set(channels[ch].subarray(offset, offset + frames), ch * frames);
+                        }
+
+                        try {
+                            const audioData = new AudioData({
+                                format: chosenFormat,
+                                sampleRate,
+                                numberOfFrames: frames,
+                                numberOfChannels,
+                                timestamp: timestampUs,
+                                data: pcm
+                            });
+                            enc.encode(audioData);
+                            audioData.close();
+                        } catch (e) {
+                            // If f32-planar failed, retry this chunk with f32 interleaved
+                            if (chosenFormat === 'f32-planar') {
+                                chosenFormat = 'f32';
+                                const interleaved = new Float32Array(frames * numberOfChannels);
+                                for (let ch = 0; ch < numberOfChannels; ch++) {
+                                    for (let i = 0; i < frames; i++) {
+                                        interleaved[i * numberOfChannels + ch] = channels[ch][offset + i] || 0;
+                                    }
+                                }
+                                try {
+                                    const ad2 = new AudioData({ format: 'f32', sampleRate, numberOfFrames: frames, numberOfChannels, timestamp: timestampUs, data: interleaved });
+                                    enc.encode(ad2);
+                                    ad2.close();
+                                } catch (e2) { console.error('[AudioEnc] both formats failed:', e2); }
                             }
                         }
 
-                        const audioData = new AudioData({
-                            format: 'f32',
-                            sampleRate,
-                            numberOfFrames: frames,
-                            numberOfChannels,
-                            timestamp: timestampUs,
-                            data: pcm
-                        });
-                        enc.encode(audioData);
-                        audioData.close();
                         offset += frames;
-                        // Yield to event loop every 16 chunks to avoid blocking
-                        if (offset % (CHUNK_FRAMES * 16) === 0) {
+                        // Yield every 32 chunks (~0.5s of audio at 4096 frames/chunk) to keep UI responsive
+                        if ((offset / CHUNK_FRAMES) % 32 === 0) {
                             setTimeout(encodeNext, 0);
                         } else {
                             encodeNext();
@@ -1285,7 +1305,9 @@
                     };
                     encodeNext();
                 });
-                setAudioStatus(`Hang bemuxolva: ${audioChunkCount} AAC chunk`);
+                setAudioStatus(audioChunkCount > 0
+                    ? `Hang bemuxolva (${audioChunkCount} AAC chunk)`
+                    : 'HIBA: 0 audio chunk – ellenőrizd a konzolt');
             }
         }
 
