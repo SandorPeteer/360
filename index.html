@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.16</title>
+    <title>360 HW Record Minimal v1.17</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.16</span><br>
+                    Build: <span>v1.17</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -986,9 +986,10 @@
         class WebCodecsRecorder {
             constructor(videoTrack, audioFileBuffer, options = {}) {
                 this.videoTrack = videoTrack;
-                this.audioFileBuffer = audioFileBuffer; // decoded AudioBuffer for post-mux
+                this.audioFileBuffer = audioFileBuffer;
                 this.options = options;
                 this.encoder = null;
+                this.audioEncoder = null;
                 this.muxer = null;
                 this.reader = null;
                 this.frameCounter = 0;
@@ -996,29 +997,46 @@
                 this.isRecording = false;
                 this.sourceCanvas = options.sourceCanvas || null;
                 this.chosenConfig = null;
-                this.videoBaseTs = null;
                 this.startedAtMs = 0;
                 this.framerate = options.framerate || 30;
-                // Collect encoded video chunks during recording; audio is muxed after stop()
-                this.videoChunks = []; // [{chunk, meta}]
-                this.recordedDurationUs = 0;
+                this.width = options.width || 720;
+                this.height = options.height || 1280;
+                // Audio live feed state
+                this._audioOffset = 0;       // samples already sent to AudioEncoder
+                this._audioLoopId = null;
             }
 
             async start() {
                 const settings = this.videoTrack && this.videoTrack.getSettings ? this.videoTrack.getSettings() : {};
                 const width = this.options.width || settings.width || 1280;
                 const height = this.options.height || settings.height || 720;
-                const framerate = this.options.framerate || settings.frameRate || 30;
+                const framerate = Math.round(this.options.framerate || settings.frameRate || 30);
                 const bitrate = this.options.videoBitsPerSecond || 12000000;
                 this.keyFrameIntervalFrames = Math.max(1, Math.round(framerate * 2));
                 this.frameCounter = 0;
-                this.videoChunks = [];
-                this.recordedDurationUs = 0;
+                this._audioOffset = 0;
+                this._audioLoopId = null;
                 this.isRecording = true;
                 this.startedAtMs = performance.now();
                 this.framerate = framerate;
                 this.width = width;
                 this.height = height;
+
+                const ab = this.audioFileBuffer;
+                const hasAudioEnc = 'AudioEncoder' in window;
+                const audioInfo = (ab && hasAudioEnc) ? {
+                    codec: 'aac',
+                    numberOfChannels: ab.numberOfChannels,
+                    sampleRate: ab.sampleRate
+                } : null;
+
+                this.muxer = new Mp4Muxer.Muxer({
+                    target: new Mp4Muxer.ArrayBufferTarget(),
+                    video: { codec: 'avc', width, height },
+                    ...(audioInfo ? { audio: audioInfo } : {}),
+                    fastStart: 'in-memory',
+                    firstTimestampBehavior: 'offset'
+                });
 
                 this.chosenConfig = await this.pickVideoConfig(width, height, framerate, bitrate);
                 this.encoder = new VideoEncoder({
@@ -1029,31 +1047,103 @@
                                 meta = { ...metadata, decoderConfig: { ...metadata.decoderConfig } };
                                 if (meta.decoderConfig.colorSpace == null) delete meta.decoderConfig.colorSpace;
                             }
-                            this.videoChunks.push({ chunk, meta });
+                            this.muxer.addVideoChunk(chunk, meta);
                             recBytes += chunk.byteLength || 0;
                         } catch (e) {
-                            console.warn('[WebCodecs] video chunk collect failed:', e);
+                            console.warn('[WebCodecs] addVideoChunk failed:', e);
                         }
                     },
                     error: (e) => console.error('[WebCodecs] Video encode error:', e)
                 });
                 this.encoder.configure(this.chosenConfig);
 
+                if (audioInfo) {
+                    await this._startLiveAudio(audioInfo);
+                }
+
                 if (typeof MediaStreamTrackProcessor !== 'undefined' && this.sourceCanvas) {
-                    // Chrome / desktop: GPU path via captureStream → MediaStreamTrackProcessor
                     const canvasTrack = this.sourceCanvas.captureStream(framerate).getVideoTracks()[0];
                     this.canvasCaptureTrack = canvasTrack;
                     const processor = new MediaStreamTrackProcessor({ track: canvasTrack });
                     this.reader = processor.readable.getReader();
                     this.processFrames();
                 } else if (typeof MediaStreamTrackProcessor !== 'undefined' && this.videoTrack) {
-                    // Chrome: direct camera track processor
                     const processor = new MediaStreamTrackProcessor({ track: this.videoTrack });
                     this.reader = processor.readable.getReader();
                     this.processFrames();
                 } else {
-                    // iPad Safari: hook into the unified draw loop for zero-jitter capture
                     this._installCanvasHook(framerate);
+                }
+            }
+
+            async _startLiveAudio(audioInfo) {
+                const ab = this.audioFileBuffer;
+                const sampleRate = ab.sampleRate;
+                const numberOfChannels = ab.numberOfChannels;
+                const CHUNK_FRAMES = 4096;
+
+                const config = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, bitrate: 192000 };
+                let finalConfig = config;
+                try {
+                    const sup = await AudioEncoder.isConfigSupported(config);
+                    if (sup && sup.supported) finalConfig = sup.config || config;
+                } catch (_) {}
+
+                this.audioEncoder = new AudioEncoder({
+                    output: (chunk, meta) => {
+                        try { this.muxer.addAudioChunk(chunk, meta); } catch (e) {
+                            console.warn('[mux] addAudioChunk failed:', e);
+                        }
+                    },
+                    error: (e) => console.error('[AudioEnc]', e)
+                });
+                this.audioEncoder.configure(finalConfig);
+
+                // Pre-copy channel data once
+                const channels = [];
+                for (let ch = 0; ch < numberOfChannels; ch++) {
+                    channels.push(ab.getChannelData(ch));
+                }
+                this._audioChannels = channels;
+                this._audioSampleRate = sampleRate;
+                this._audioChunkFrames = CHUNK_FRAMES;
+                this._audioTotalFrames = ab.length; // loop infinitely from buffer
+
+                // Feed audio chunks via setInterval keeping ahead of video by ~100ms
+                const intervalMs = (CHUNK_FRAMES / sampleRate) * 1000 * 0.9; // slightly faster than realtime
+                this._audioLoopId = setInterval(() => this._feedAudioChunk(), intervalMs);
+                // Feed first chunk immediately
+                this._feedAudioChunk();
+                setAudioStatus('Live audio encoding...');
+            }
+
+            _feedAudioChunk() {
+                if (!this.isRecording || !this.audioEncoder || this.audioEncoder.state !== 'configured') return;
+                const { _audioChannels: channels, _audioSampleRate: sampleRate,
+                        _audioChunkFrames: CHUNK_FRAMES, _audioTotalFrames: total } = this;
+                const offset = this._audioOffset % total; // loop the music
+                const frames = Math.min(CHUNK_FRAMES, total - offset);
+                const timestampUs = Math.round(this._audioOffset * 1_000_000 / sampleRate);
+
+                // f32-planar layout
+                const pcm = new Float32Array(frames * channels.length);
+                for (let ch = 0; ch < channels.length; ch++) {
+                    pcm.set(channels[ch].subarray(offset, offset + frames), ch * frames);
+                }
+                try {
+                    const ad = new AudioData({
+                        format: 'f32-planar',
+                        sampleRate,
+                        numberOfFrames: frames,
+                        numberOfChannels: channels.length,
+                        timestamp: timestampUs,
+                        data: pcm
+                    });
+                    this.audioEncoder.encode(ad);
+                    ad.close();
+                    this._audioOffset += frames;
+                } catch (e) {
+                    console.warn('[AudioEnc] feed error:', e);
                 }
             }
 
@@ -1152,7 +1242,12 @@
 
             async stop() {
                 this.isRecording = false;
-                captureCallback = null; // unhook from unified draw loop
+                captureCallback = null;
+
+                if (this._audioLoopId) {
+                    clearInterval(this._audioLoopId);
+                    this._audioLoopId = null;
+                }
                 if (this.canvasCaptureTrack) {
                     try { this.canvasCaptureTrack.stop(); } catch (_) {}
                     this.canvasCaptureTrack = null;
@@ -1161,153 +1256,26 @@
                     try { await this.reader.cancel(); } catch (_) {}
                     this.reader = null;
                 }
+                if (this.audioEncoder && this.audioEncoder.state === 'configured') {
+                    try { await this.audioEncoder.flush(); this.audioEncoder.close(); } catch (e) {
+                        console.warn('[WebCodecs] Audio flush error:', e);
+                    }
+                    this.audioEncoder = null;
+                }
                 if (this.encoder && this.encoder.state === 'configured') {
-                    try {
-                        await this.encoder.flush();
-                        this.encoder.close();
-                    } catch (e) {
-                        console.warn('[WebCodecs] Video flush/close error:', e);
+                    try { await this.encoder.flush(); this.encoder.close(); } catch (e) {
+                        console.warn('[WebCodecs] Video flush error:', e);
                     }
                 }
-
-                // Duration = frameCounter * frameDurUs (monoton, EncodedVideoChunk.duration is always null)
-                this.recordedDurationUs = Math.round(this.frameCounter * (1_000_000 / this.framerate));
-
-                return await this._muxFinal();
-            }
-
-            async _muxFinal() {
-                const width = this.width || this.options.width || 720;
-                const height = this.height || this.options.height || 1280;
-                const hasAudioEnc = 'AudioEncoder' in window;
-                const audioBuffer = this.audioFileBuffer;
-                const canEncodeAudio = hasAudioEnc && audioBuffer && this.recordedDurationUs > 0;
-
-                const audioInfo = canEncodeAudio ? {
-                    codec: 'aac',
-                    numberOfChannels: audioBuffer.numberOfChannels,
-                    sampleRate: audioBuffer.sampleRate
-                } : null;
-
-                const muxer = new Mp4Muxer.Muxer({
-                    target: new Mp4Muxer.ArrayBufferTarget(),
-                    video: { codec: 'avc', width, height },
-                    ...(audioInfo ? { audio: audioInfo } : {}),
-                    fastStart: 'in-memory'
-                });
-
-                // Write all collected video chunks
-                for (const { chunk, meta } of this.videoChunks) {
-                    try { muxer.addVideoChunk(chunk, meta); } catch (e) {
-                        console.warn('[mux] addVideoChunk failed:', e);
-                    }
+                if (this.muxer) {
+                    this.muxer.finalize();
+                    const { buffer } = this.muxer.target;
+                    setAudioStatus(this.audioEncoder !== null || this.audioFileBuffer
+                        ? 'Hang bemuxolva'
+                        : 'Hang: AudioEncoder nem elérhető');
+                    return new Blob([buffer], { type: 'video/mp4' });
                 }
-                this.videoChunks = [];
-
-                if (canEncodeAudio) {
-                    setAudioStatus('Hang kódolása...');
-                    await this._encodeAudioIntoMuxer(muxer, audioBuffer, audioInfo);
-                } else {
-                    setAudioStatus(hasAudioEnc ? 'Hang: nincs audio buffer' : 'Hang: AudioEncoder nem elérhető (Safari)');
-                }
-
-                muxer.finalize();
-                const { buffer } = muxer.target;
-                return new Blob([buffer], { type: 'video/mp4' });
-            }
-
-            async _encodeAudioIntoMuxer(muxer, audioBuffer, audioInfo) {
-                const sampleRate = audioBuffer.sampleRate;
-                const numberOfChannels = audioBuffer.numberOfChannels;
-                const durationSec = this.recordedDurationUs / 1_000_000;
-                const totalFrames = Math.min(audioBuffer.length, Math.ceil(durationSec * sampleRate));
-                const CHUNK_FRAMES = 4096;
-                const audioBitrate = this.options.audioBitsPerSecond || 192000;
-
-                // Try f32-planar first (Chrome), fall back to f32 (interleaved, some Safari)
-                let chosenFormat = 'f32-planar';
-                const baseConfig = { codec: 'mp4a.40.2', sampleRate, numberOfChannels, bitrate: audioBitrate };
-                let finalConfig = baseConfig;
-                try {
-                    const sup = await AudioEncoder.isConfigSupported(baseConfig);
-                    if (sup && sup.supported) finalConfig = sup.config || baseConfig;
-                } catch (_) {}
-
-                let audioChunkCount = 0;
-                await new Promise((resolve, reject) => {
-                    const enc = new AudioEncoder({
-                        output: (chunk, meta) => {
-                            try { muxer.addAudioChunk(chunk, meta); audioChunkCount++; } catch (e) {
-                                console.warn('[mux] addAudioChunk failed:', e);
-                            }
-                        },
-                        error: (e) => { console.error('[AudioEnc]', e); reject(e); }
-                    });
-                    enc.configure(finalConfig);
-
-                    // Pre-copy all channel data once (avoids repeated getChannelData calls in the loop)
-                    const channels = [];
-                    for (let ch = 0; ch < numberOfChannels; ch++) {
-                        channels.push(audioBuffer.getChannelData(ch));
-                    }
-
-                    let offset = 0;
-                    const encodeNext = () => {
-                        if (offset >= totalFrames) {
-                            enc.flush().then(() => { enc.close(); resolve(); }).catch(reject);
-                            return;
-                        }
-                        const frames = Math.min(CHUNK_FRAMES, totalFrames - offset);
-                        const timestampUs = Math.round(offset * 1_000_000 / sampleRate);
-
-                        // f32-planar: each channel is a contiguous block
-                        const pcm = new Float32Array(frames * numberOfChannels);
-                        for (let ch = 0; ch < numberOfChannels; ch++) {
-                            pcm.set(channels[ch].subarray(offset, offset + frames), ch * frames);
-                        }
-
-                        try {
-                            const audioData = new AudioData({
-                                format: chosenFormat,
-                                sampleRate,
-                                numberOfFrames: frames,
-                                numberOfChannels,
-                                timestamp: timestampUs,
-                                data: pcm
-                            });
-                            enc.encode(audioData);
-                            audioData.close();
-                        } catch (e) {
-                            // If f32-planar failed, retry this chunk with f32 interleaved
-                            if (chosenFormat === 'f32-planar') {
-                                chosenFormat = 'f32';
-                                const interleaved = new Float32Array(frames * numberOfChannels);
-                                for (let ch = 0; ch < numberOfChannels; ch++) {
-                                    for (let i = 0; i < frames; i++) {
-                                        interleaved[i * numberOfChannels + ch] = channels[ch][offset + i] || 0;
-                                    }
-                                }
-                                try {
-                                    const ad2 = new AudioData({ format: 'f32', sampleRate, numberOfFrames: frames, numberOfChannels, timestamp: timestampUs, data: interleaved });
-                                    enc.encode(ad2);
-                                    ad2.close();
-                                } catch (e2) { console.error('[AudioEnc] both formats failed:', e2); }
-                            }
-                        }
-
-                        offset += frames;
-                        // Yield every 32 chunks (~0.5s of audio at 4096 frames/chunk) to keep UI responsive
-                        if ((offset / CHUNK_FRAMES) % 32 === 0) {
-                            setTimeout(encodeNext, 0);
-                        } else {
-                            encodeNext();
-                        }
-                    };
-                    encodeNext();
-                });
-                setAudioStatus(audioChunkCount > 0
-                    ? `Hang bemuxolva (${audioChunkCount} AAC chunk)`
-                    : 'HIBA: 0 audio chunk – ellenőrizd a konzolt');
+                return new Blob([], { type: 'video/mp4' });
             }
         }
 
