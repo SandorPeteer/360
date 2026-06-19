@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.21</title>
+    <title>360 HW Record Minimal v1.22</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.21</span><br>
+                    Build: <span>v1.22</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -677,57 +677,15 @@
             recBytes = 0;
             recStartMs = performance.now();
 
-            if (!useWebCodecs) {
-                logMsg('WebCodecs N/A – MediaRecorder fallback');
-                await startRecordingMediaRecorder(fps, bitrate);
-                btnRecord.textContent = 'STOP';
-                if (recStatsTimer) clearInterval(recStatsTimer);
-                recStatsTimer = setInterval(() => {
-                    const elapsed = Math.max(0.001, (performance.now() - recStartMs) / 1000);
-                    if (statusBitrate) statusBitrate.textContent = `${elapsed.toFixed(0)}s`;
-                }, 500);
-                return;
-            }
-
-            // WebCodecs path: HW video encoding, audio muxed in post-processing after stop()
-            // buildMixedAudioTrack itt csak a monitor lejátszáshoz kell (hangszóró), az audio track-et nem használjuk
-            if (audioFileBuffer) {
-                buildMixedAudioTrack(null, audioFileBuffer);
-            }
-            setAudioStatus(audioFileBuffer ? 'Felvétel közben zene szól, utána bemuxolás...' : 'Nincs zenefájl');
-
-            recorder = new WebCodecsRecorder(track, {
-                width: canvas.width,
-                height: canvas.height,
-                framerate: fps,
-                videoBitsPerSecond: bitrate,
-                sourceCanvas: canvas
-            });
-            try {
-                await recorder.start();
-                startAudioMixPlayback();
-                if (recorder.chosenConfig) {
-                    encoderStatus.textContent = `WebCodecs HW ${recorder.chosenConfig.codec || 'avc1'} ${canvas.width}x${canvas.height}@${fps}`;
-                } else {
-                    encoderStatus.textContent = 'WebCodecs HW running';
-                }
-            } catch (e) {
-                console.error(e);
-                logMsg('WebCodecs failed – MediaRecorder fallback');
-                recorder = null;
-                await startRecordingMediaRecorder(fps, bitrate);
-                btnRecord.textContent = 'STOP';
-                return;
-            }
-
+            // canvas.captureStream + Web Audio → MediaRecorder
+            // Egyszerű, megbízható, iPad Chrome-ban natív H.264 + AAC, hang szinkronban
+            await startRecordingMediaRecorder(fps, bitrate);
+            btnRecord.textContent = 'STOP';
             if (recStatsTimer) clearInterval(recStatsTimer);
             recStatsTimer = setInterval(() => {
                 const elapsed = Math.max(0.001, (performance.now() - recStartMs) / 1000);
-                const avgMbps = (recBytes * 8) / (elapsed * 1_000_000);
-                if (statusBitrate) statusBitrate.textContent = `${avgMbps.toFixed(1)} Mbps`;
+                if (statusBitrate) statusBitrate.textContent = `${elapsed.toFixed(0)}s`;
             }, 500);
-            btnRecord.textContent = 'STOP';
-            logMsg('REC...');
         }
 
         async function stopRecording() {
@@ -748,6 +706,8 @@
                 mediaRecorderFallback = null;
                 cleanupRecordingStream();
                 stopAudioMix();
+                if (processingOverlay) processingOverlay.classList.add('hidden');
+                btnRecord.disabled = false;
             } else if (recorder) {
                 try {
                     logMsg('Videó lezárása...');
