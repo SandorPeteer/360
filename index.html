@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.29</title>
+    <title>360 HW Record Minimal v1.30</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.29</span><br>
+                    Build: <span>v1.30</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -932,40 +932,13 @@
                     reader.onerror = rej;
                     reader.readAsDataURL(blob);
                 });
-                // Hidden iframe form POST — bypasses CORS entirely, Apps Script receives it fine
-                const iframeName = 'driveUploadFrame_' + Date.now();
-                const iframe = document.createElement('iframe');
-                iframe.name = iframeName;
-                iframe.style.display = 'none';
-                document.body.appendChild(iframe);
-
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = webhookUrl;
-                form.target = iframeName;
-                form.style.display = 'none';
-
-                const addField = (name, value) => {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = name;
-                    input.value = value;
-                    form.appendChild(input);
-                };
-                addField('filename', filename);
-                addField('data', base64);
-                addField('mimeType', 'video/mp4');
-
-                document.body.appendChild(form);
-                form.submit();
-
-                // Clean up after a few seconds
-                setTimeout(() => {
-                    form.remove();
-                    iframe.remove();
-                }, 10000);
-
-                logMsg('Drive: elküldve, ellenőrizd a mappát!');
+                const resp = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ filename, data: base64, mimeType: 'video/mp4' })
+                });
+                const text = await resp.text().catch(() => '?');
+                logMsg('Drive: ' + (resp.ok ? 'OK ' + text : 'HIBA ' + resp.status));
             } catch (e) {
                 logMsg('Drive hiba: ' + e.message);
             } finally {
