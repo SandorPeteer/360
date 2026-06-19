@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.17</title>
+    <title>360 HW Record Minimal v1.18</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.17</span><br>
+                    Build: <span>v1.18</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -1086,20 +1086,26 @@
                 let finalConfig = config;
                 try {
                     const sup = await AudioEncoder.isConfigSupported(config);
+                    console.log('[AudioEnc] isConfigSupported:', JSON.stringify(sup));
                     if (sup && sup.supported) finalConfig = sup.config || config;
-                } catch (_) {}
+                    else { console.error('[AudioEnc] config NOT supported!', config); return; }
+                } catch (e) { console.error('[AudioEnc] isConfigSupported threw:', e); return; }
 
+                this._audioChunkCount = 0;
                 this.audioEncoder = new AudioEncoder({
                     output: (chunk, meta) => {
-                        try { this.muxer.addAudioChunk(chunk, meta); } catch (e) {
-                            console.warn('[mux] addAudioChunk failed:', e);
+                        this._audioChunkCount++;
+                        try {
+                            this.muxer.addAudioChunk(chunk, meta);
+                        } catch (e) {
+                            console.error('[mux] addAudioChunk failed:', e, 'chunk ts=', chunk.timestamp, 'meta=', meta);
                         }
                     },
-                    error: (e) => console.error('[AudioEnc]', e)
+                    error: (e) => console.error('[AudioEnc] encoder error:', e)
                 });
                 this.audioEncoder.configure(finalConfig);
+                console.log('[AudioEnc] configured:', JSON.stringify(finalConfig));
 
-                // Pre-copy channel data once
                 const channels = [];
                 for (let ch = 0; ch < numberOfChannels; ch++) {
                     channels.push(ab.getChannelData(ch));
@@ -1107,25 +1113,23 @@
                 this._audioChannels = channels;
                 this._audioSampleRate = sampleRate;
                 this._audioChunkFrames = CHUNK_FRAMES;
-                this._audioTotalFrames = ab.length; // loop infinitely from buffer
+                this._audioTotalFrames = ab.length;
 
-                // Feed audio chunks via setInterval keeping ahead of video by ~100ms
-                const intervalMs = (CHUNK_FRAMES / sampleRate) * 1000 * 0.9; // slightly faster than realtime
+                const intervalMs = (CHUNK_FRAMES / sampleRate) * 1000 * 0.9;
                 this._audioLoopId = setInterval(() => this._feedAudioChunk(), intervalMs);
-                // Feed first chunk immediately
                 this._feedAudioChunk();
-                setAudioStatus('Live audio encoding...');
+                setAudioStatus(`Audio encoding live (${sampleRate}Hz ${numberOfChannels}ch)`);
             }
 
             _feedAudioChunk() {
                 if (!this.isRecording || !this.audioEncoder || this.audioEncoder.state !== 'configured') return;
                 const { _audioChannels: channels, _audioSampleRate: sampleRate,
                         _audioChunkFrames: CHUNK_FRAMES, _audioTotalFrames: total } = this;
-                const offset = this._audioOffset % total; // loop the music
+                const offset = this._audioOffset % total;
                 const frames = Math.min(CHUNK_FRAMES, total - offset);
                 const timestampUs = Math.round(this._audioOffset * 1_000_000 / sampleRate);
 
-                // f32-planar layout
+                // f32-planar: ch0[0..frames], ch1[0..frames], ...
                 const pcm = new Float32Array(frames * channels.length);
                 for (let ch = 0; ch < channels.length; ch++) {
                     pcm.set(channels[ch].subarray(offset, offset + frames), ch * frames);
@@ -1143,7 +1147,7 @@
                     ad.close();
                     this._audioOffset += frames;
                 } catch (e) {
-                    console.warn('[AudioEnc] feed error:', e);
+                    console.error('[AudioEnc] feed error ts=', timestampUs, 'frames=', frames, e);
                 }
             }
 
@@ -1270,9 +1274,9 @@
                 if (this.muxer) {
                     this.muxer.finalize();
                     const { buffer } = this.muxer.target;
-                    setAudioStatus(this.audioEncoder !== null || this.audioFileBuffer
-                        ? 'Hang bemuxolva'
-                        : 'Hang: AudioEncoder nem elérhető');
+                    const ac = this._audioChunkCount || 0;
+                    console.log('[WebCodecs] stop: audioChunks=', ac, 'videoFrames=', this.frameCounter, 'bufSize=', buffer.byteLength);
+                    setAudioStatus(ac > 0 ? `Hang bemuxolva (${ac} chunk)` : (this.audioFileBuffer ? 'HIBA: 0 audio chunk!' : 'Nincs zenefájl'));
                     return new Blob([buffer], { type: 'video/mp4' });
                 }
                 return new Blob([], { type: 'video/mp4' });
