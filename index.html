@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360 HW Record Minimal v1.25</title>
+    <title>360 HW Record Minimal v1.26</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -31,8 +31,8 @@
         #menuHeader { display: flex; justify-content: flex-end; }
         #menuClose { width: 36px; height: 36px; border-radius: 8px; display: none; }
         #menuBackdrop { display: none !important; }
-        #recBtnWrap { position: fixed; right: 16px; bottom: 16px; z-index: 20; }
-        #btnRecord { width: 140px; height: 44px; border-radius: 999px; }
+        #recBtnWrap { position: fixed; right: 16px; bottom: max(16px, env(safe-area-inset-bottom, 16px)); z-index: 20; }
+        #btnRecord { width: 160px; height: 64px; border-radius: 999px; font-size: 22px; font-weight: 900; letter-spacing: .1em; touch-action: manipulation; }
         #videoWrap { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: flex-start; padding: 0 380px 0 0; overflow: hidden; }
         #startOverlay { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; background: #0b0f14; }
         #startOverlay.hidden { display: none; }
@@ -80,7 +80,7 @@
                     WebCodecs video encoder required on this device/browser
                 </div>
                 <div class="row" style="font-size: 12px; color: #334155;">
-                    Build: <span>v1.25</span><br>
+                    Build: <span>v1.26</span><br>
                     Encoder: <span id="encoderStatus">Detecting...</span><br>
                     Audio: <span id="audioStatus">-</span><br>
                     Actual: <span id="actualRes">-</span><br>
@@ -130,7 +130,12 @@
                 <div class="buttons" id="outputActions">
                     <button id="btnOpenOutput" disabled>Open in new tab</button>
                     <button id="btnDownloadOutput" disabled>Download</button>
+                    <button id="btnDriveUpload" disabled>Drive feltöltés</button>
                     <button id="btnClearOutput" disabled>Clear</button>
+                </div>
+                <div class="row">
+                    <label for="driveWebhookUrl">Google Drive webhook URL</label>
+                    <input id="driveWebhookUrl" type="url" placeholder="https://script.google.com/macros/s/...">
                 </div>
             </div>
         </div>
@@ -167,6 +172,8 @@
         const outputActions = document.getElementById('outputActions');
         const btnOpenOutput = document.getElementById('btnOpenOutput');
         const btnDownloadOutput = document.getElementById('btnDownloadOutput');
+        const btnDriveUpload = document.getElementById('btnDriveUpload');
+        const driveWebhookUrl = document.getElementById('driveWebhookUrl');
         const btnClearOutput = document.getElementById('btnClearOutput');
         const menuBtn = document.getElementById('menuBtn');
         const menuDrawer = document.getElementById('menuDrawer');
@@ -890,12 +897,53 @@
             btnDownloadOutput.addEventListener('click', () => {
                 if (!currentBlobUrl) return;
                 const now = new Date();
-                const name = `360_hw_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.mp4`;
+                const name = `360_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.mp4`;
                 const a = document.createElement('a');
                 a.href = currentBlobUrl;
                 a.download = name;
                 a.click();
+                // Also upload to Drive if webhook is configured
+                uploadToDrive(name);
             });
+        }
+
+        if (btnDriveUpload) {
+            btnDriveUpload.addEventListener('click', () => {
+                if (!currentBlobUrl) return;
+                const now = new Date();
+                const name = `360_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}.mp4`;
+                uploadToDrive(name);
+            });
+        }
+
+        async function uploadToDrive(filename) {
+            const webhookUrl = driveWebhookUrl ? driveWebhookUrl.value.trim() : '';
+            if (!webhookUrl || !currentBlobUrl) {
+                if (!webhookUrl) logMsg('Drive webhook URL nincs beállítva!');
+                return;
+            }
+            try {
+                logMsg('Drive feltöltés...');
+                if (btnDriveUpload) { btnDriveUpload.disabled = true; btnDriveUpload.textContent = 'Feltöltés...'; }
+                const blob = await fetch(currentBlobUrl).then(r => r.blob());
+                const reader = new FileReader();
+                const base64 = await new Promise((res, rej) => {
+                    reader.onload = () => res(reader.result.split(',')[1]);
+                    reader.onerror = rej;
+                    reader.readAsDataURL(blob);
+                });
+                const resp = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, data: base64, mimeType: 'video/mp4' })
+                });
+                const text = await resp.text();
+                logMsg('Drive: ' + (resp.ok ? 'OK ' + text : 'HIBA ' + resp.status));
+            } catch (e) {
+                logMsg('Drive hiba: ' + e.message);
+            } finally {
+                if (btnDriveUpload) { btnDriveUpload.disabled = false; btnDriveUpload.textContent = 'Drive feltöltés'; }
+            }
         }
         if (btnClearOutput) {
             btnClearOutput.addEventListener('click', clearOutput);
